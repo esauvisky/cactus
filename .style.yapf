@@ -119,7 +119,7 @@ dedent_closing_brackets=False
 
 # Disable the heuristic which places each list element on a separate line
 # if the list is comma-terminated.
-disable_ending_comma_heuristic=True
+disable_ending_comma_heuristic=False
 
 # Place each dictionary entry onto its own line.
 each_dict_entry_on_separate_line=False
@@ -305,7 +305,7 @@ split_penalty_bitwise_operator=300
 split_penalty_comprehension=300
 
 # The penalty for characters over the column limit.
-split_penalty_excess_character=5
+split_penalty_excess_character=50
 
 # The penalty incurred by adding a line split to the unwrapped line. The
 # more line splits added the higher the penalty.
