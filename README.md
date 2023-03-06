@@ -1,9 +1,6 @@
 # Cactus Automates Commits Through Uncomplicated Suggestions
 
-## Demo
-<video width="100%" height="100%" controls>
-  <source src="https://github.com/esauvisky/cactus/blob/4efccd3cbedc409a1190a935f96c57f9d81af088/.video.mp4" type="video/mp4">
-</video>
+![Cactus Demo](./.video.gif)
 
 ## About
 
