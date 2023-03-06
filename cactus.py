@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import textwrap
 
 import openai
 import pick
@@ -30,11 +31,11 @@ def setup_logging(level="DEBUG", show_module=False):
 
 
 def setup_openai_token():
-    openai_token = input("Enter your OpenAI token: ")
+    token = input("Enter your OpenAI token: ")
     config_dir = os.path.expanduser("~/.config/cactus")
     os.makedirs(config_dir, exist_ok=True)
     with open(os.path.join(config_dir, "openai_token"), "w") as f:
-        f.write(openai_token)
+        f.write(token)
     logger.success("OpenAI token saved.")
 
 
@@ -42,13 +43,13 @@ def load_openai_token():
     config_dir = os.path.expanduser("~/.config/cactus")
     try:
         with open(os.path.join(config_dir, "openai_token"), "r") as f:
-            openai_token = f.read().strip()
-        return openai_token
+            token = f.read().strip()
+        return token
     except FileNotFoundError:
         return None
 
 
-def get_git_diff(all_changes=False, complexity=3):
+def get_git_diff(complexity=3):
     # Check if there are staged changes
     result = subprocess.run("git diff --cached --quiet --exit-code", shell=True)
     if result.returncode == 0:
@@ -57,14 +58,13 @@ def get_git_diff(all_changes=False, complexity=3):
         sys.exit(1)
 
     cmd = f"git --no-pager diff --ignore-all-space --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --unified={complexity if complexity > 0 else 0}"
-    if not all_changes:
-        cmd += " --staged"
+    cmd += " --staged"
     result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         logger.error("Failed to get git diff: %s", result.stderr.decode().strip())
         sys.exit(1)
-    diff = result.stdout.decode().strip()
-    lines = diff.splitlines()
+    result = result.stdout.decode().strip()
+    lines = result.splitlines()
 
     diff_files = []
     file_header = None
@@ -162,14 +162,13 @@ def trim_git_diff(diff):
 def send_request(diff, category):
     first_prompt = textwrap.dedent("""Below, between lines containing hashtags, there's a git diff, consisting of the changes in files staged for a particular commit in a git repository.
 
-    Read the diff and identify what are the changes that the new code brings. We will call these "change features". Sort the change features in descending order of importance and magnitude, while trying as much as possible to encapsulate as many changes as possible in a single change feature. Pick the top two, most important change features, and discard the rest. For each of them, write 5 different commit messages suggestions and present them sorted in descending order of likehood of matching the diff. We will call these "commit messages". Commit messages should be written in the imperative mood, beginning with the main type of change introduced by the commit, """) # yapf: disable
+    Read the diff and return write five potential commit messages to describe the changes in the code. Sort them in descending order of importance and magnitude, with the most likely to be correct and the most likely to encompass as many changes as possible in a single sentence. Commit messages must be short and concise, and should be understandable by someone who is not familiar with the codebase. They must be written in the present tense, and must not contain any punctuation at the end. Commit messages must not be too specific, nor contain any code or parts of the code, instead they should describe the overall change. Commit messages must begin with the main type introduced by the commit, """) # yapf: disable
     if category:
         first_prompt += f"which in this case is {category}, followed by a colon and a space.\n"
     else:
-        first_prompt += textwrap.dedent("""followed by a colon and a space. The possible types of changes, sorted from the most commonly used to the least commonly used are: "fix", "feat", "chore", "docs", "refactor", "style", "test", "per", "build", "ci", "wip", "misc". If you think that there are multiple major important features to describe within a single category, you can use a comma-separated list of types and descriptions, for example: if both a bug in get_response() was fixed and a new feature adding support for more filetypes was done at once, one of the ten possible commit message could be: "fix, feat: remove broken param from get_response(). allow parsing other filetypes.
-        """)
+        first_prompt += textwrap.dedent("""followed by a colon and a space. The possible types of changes are: "fix", "feat", "chore", "docs", "refactor", "style", "test", "per", "build", "ci", "wip", "misc". If you think that there are multiple major important features to describe within a single category, you can use a comma-separated list of types and descriptions, for example: if both a bug in get_response() was fixed and a new feature adding support for more filetypes was done at once, one of the ten possible commit message could be: "fix, feat: remove broken param from get_response(), allow parsing other filetypes\". """) # yapf: disable
 
-    first_prompt += "\nIMPORTANT: YOU MUST RETURN ONLY TEN LINES, with one COMMIT MESSAGE each, ONE PER LINE, and ABSOLUTELY NOTHING ELSE."
+    first_prompt += "\nIMPORTANT: YOU MUST RETURN EXACTLY TEN LINES, EACH ONE CONTAINING A SINGLE COMMIT MESSAGE and NOTHING ELSE."
     first_prompt += f"\n\n###\n{diff}\n###\n"
     logger.debug(f'Prompt is: {first_prompt}')
     response = openai.ChatCompletion.create(model="gpt-3.5-turbo",
@@ -190,19 +189,30 @@ if __name__ == "__main__":
 
     class Formatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
         pass
-    PARSER = argparse.ArgumentParser(prog="cactus", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    PARSER.add_argument("-d", "--debug", action="store_true", help="Show debug messages")
-    group = PARSER.add_mutually_exclusive_group()
-    group.add_argument("setup", nargs='?', help="Initial setup of your OpenAI token")
-    group_model = group.add_mutually_exclusive_group()
-    group_model.add_argument("pick", nargs='?', help="Generates five commit messages for staged changes and lets you choose one (default)")
-    group_model.add_argument("-m", "--model", default="text-davinci-003", choices=[
-        "text-curie-001", "text-babbage-001", "text-davinci-003", "text-ada-001"], help="OpenAI model to use")
-    group_model.add_argument(
-        "-c", "--categories", default=None, help="Ask user to pick a restrictive main category from a list (comma separated, example: 'fix,feat,chore,refactor,style,docs,build,ci,perf')")
-    group_model.add_argument(
-        "-a", "--all", action="store_true", help="Use all non staged changes instead of staged changes, but don't autocommit afterwards.")
 
+    PARSER = argparse.ArgumentParser(prog="cactus", formatter_class=Formatter)
+    PARSER.add_argument("-d", "--debug", action="store_true", help="Show debug messages")
+
+    sub_parsers = PARSER.add_subparsers(dest="command")
+    setup_parser = sub_parsers.add_parser("setup", help="Initial setup of your OpenAI token")
+    pick_parser = sub_parsers.add_parser("pick",
+                                         help="Generates five commit messages for staged changes and lets you choose one")
+
+    pick_parser.add_argument("-m",
+                             "--model",
+                             default="text-davinci-003",
+                             choices=["text-curie-001", "text-babbage-001", "text-davinci-003", "text-ada-001"],
+                             help="OpenAI model to use")
+
+    pick_parser.add_argument("-c",
+                             "--categories",
+                             default=[],
+                             nargs='?',
+                             help="Ask user to pick a restrictive main category from a list. "
+                                 + "If not specified, the bot will try to guess the main category."
+                                 + "If no list is provided but the flag is specified, cactus will use a default list of categories.") # yapf: disable
+
+    sub_parsers.default = "pick"
     args = PARSER.parse_args()
 
     if args.debug:
@@ -210,7 +220,7 @@ if __name__ == "__main__":
     else:
         setup_logging("INFO")
 
-    if args.setup:
+    if args.command == "setup":
         setup_openai_token()
         sys.exit(0)
 
@@ -221,15 +231,21 @@ if __name__ == "__main__":
     openai.api_key = openai_token
 
     category = None
-    if args.categories:
-        categories = args.categories.split(",")
-        category, _ = pick.pick(categories, "Pick a category:", indicator='=>', default_index=0)
+    if "categories" in args:
+        if args.categories is None:
+            categories = "fix,feat,chore,refactor,style,docs,build,ci,perf".split(",")
+            category, _ = pick.pick(categories, "Pick a category:", indicator='=>', default_index=0)
+        elif len(args.categories) != 0:
+            categories = args.categories.split(",")
+            category, _ = pick.pick(categories, "Pick a category:", indicator='=>', default_index=0)
+        else:
+            categories = []
 
     response = None
     complexity = 3
     while not response:
         try:
-            diff = get_git_diff(all_changes=args.all, complexity=complexity)
+            diff = get_git_diff(complexity=complexity)
             response = send_request(diff, category)
         except Exception as e:
             if "This model's maximum context length is " in str(e):
@@ -246,9 +262,5 @@ if __name__ == "__main__":
     commit_messages = [choice.lower().strip() for choice in clean_response.splitlines()]
     message, _ = pick.pick(commit_messages, "Pick a suggestion:", indicator='=>', default_index=0)
 
-    if not args.all:
-        # Make the commit with the chosen commit message
-        subprocess.run(f"git commit -m '{message}'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    else:
-        # Just show the chosen commit message and exit
-        print(message)
+    # Make the commit with the chosen commit message
+    subprocess.run(f"git commit -m '{message}'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
