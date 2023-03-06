@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
 CACTUS Automates Commits Through Uncomplicated Suggestions
-
-Usage:
-
 """
 __author__ = "emi"
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __license__ = "MIT"
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 
@@ -68,55 +66,61 @@ def get_git_diff(all_changes=False, complexity=3):
     diff = result.stdout.decode().strip()
     lines = diff.splitlines()
 
-    file_diff = []
-    file_name = None
-    changed_lines = []
+    diff_files = []
+    file_header = None
+    file_blocks = []
+    block_header = None
+    block_lines = []
 
     for line in lines:
         if line.startswith("diff --git"):
-            if file_name is not None and "yarn.lock" not in file_name:
-                # Save previous file diff
-                file_diff.append((file_name, changed_lines))
-                changed_lines = []
-            file_name = ">> " + "".join(line.split(" ")[-1].split("/")[-1:])
-        elif line.startswith("+++") or line.startswith("---"):
-            pass   # ignore header lines
-        elif line.startswith("+") or line.startswith("-"):
-            changed_lines.append(line)
+            if block_header:
+                file_blocks.append((block_header, block_lines))
+                block_lines = []
+            if file_header:
+                diff_files.append((file_header, file_blocks))
+                file_blocks = []
+                block_lines = []
+            file_header = line
         elif line.startswith("@@"):
-            changed_lines.append("@@")
+            if block_header:
+                file_blocks.append((block_header, block_lines))
+                block_lines = []
+            block_header = line
+        elif line.startswith("---") or line.startswith("+++") or line.startswith("index"):
+            continue
+        else:
+            block_lines.append(line)
 
-    # Save last file diff
-    if "yarn.lock" not in file_name:
-        file_diff.append((file_name, changed_lines))
+    # Append the last block and file
+    file_blocks.append((block_header, block_lines))
+    diff_files.append((file_header, file_blocks))
 
-    stripped_diff = []
-    for file_name, changed_lines in file_diff:
-        stripped_diff.append(file_name)
-        stripped_diff.extend(changed_lines)
-        stripped_diff.append("")
+    final_diff = []
+    for file_header, blocks in diff_files:
+        final_diff.append(file_header)
+        for block_header, block_lines in blocks:
+            final_diff.append(block_header)
+            for line in block_lines:
+                final_diff.append(line)
 
-    # stripped_diff = " ".join(stripped_diff)
-    # stripped_diff = "".join(c for c in stripped_diff if c.isalnum() or c in [" ", "'", '"']).strip()
-    stripped_diff = "\n".join(stripped_diff)
-
-    # TODO: implement better trimming on the population side
+    final_diff = "\n".join(final_diff)
     if complexity < 0:
+        # FIXME: implement better trimming on the population side
         for _ in range(abs(complexity)):
-            stripped_diff = trim_git_diff(stripped_diff)
+            final_diff = trim_git_diff(final_diff)
 
     # TODO: count tokens instead of words
     # SEE: https://platform.openai.com/tokenizer?view=bpe
-    if len(stripped_diff.split()) < 8:
-        logger.error("Diff is too small.")
+    if len(final_diff.split()) < 8:
+        logger.error("Diff is too small! Check the output of `git diff --staged`.")
         sys.exit(1)
-    elif len(stripped_diff.split()) > 3000:
-        logger.error("Diff is too large.")
-        sys.exit(1)
+    elif len(final_diff.split()) > 3000:
+        raise Exception("Diff is too large.")
     else:
-        logger.success(f"Diff has {len(stripped_diff.split())} words.")
+        logger.success(f"Diff has {len(final_diff.split())} words.")
 
-    return stripped_diff
+    return final_diff
 
 
 def trim_git_diff(diff):
@@ -157,34 +161,30 @@ def trim_git_diff(diff):
 
 def send_request(model, diff, category):
     prompt = """
-Below, between lines containing "##########", there's a git diff. The diff consists of the changes in files for a git repository.
+Below, between lines containing hashtags, there's a git diff, consisting of the changes in files staged for a particular commit in a git repository.
 
-Your output must consist of five lines, each one containing a different commit message suggestion. The messages should be written in imperative mood and in the present tense, should not contain any punctuation marks, special characters or emojis. The messages should be ordered from the most likely to the least likely alternative.\n"""
+Your output must consist of five lines, each one containing a different commit message suggestion. The suggestions must be viable messages to be used as the git commit message that will describe the changes in the files, and must be related and appropriate for the changes in the diff. They should be written in imperative mood and in the present tense, should not contain any punctuation marks, special characters or emojis. The messages should be ordered from the most likely to the least likely alternative.\n"""
     if category:
-        prompt += f"These changes fall into changes of type '{category}', therefore, all suggestions for commit messages must be related to this category. The messages should also begin with the category name, followed by a colon and a space, i.e. '{category}: '."
-    else:
-        prompt += "Here are some examples:"
-        prompt += '- if a file was renamed, the commit message must not be simply "refactor", but rather "chore: rename file A to file B";'
-        prompt += '- if the diff contains a bug fix and a new feature called XXX, the commit messages must not be "fix bug" or "add feature", but rather "fix, feat: fix bug and add new feat XXX";'
-        prompt += '- if the diff fixes a typo or tweaks/improves styling, the commit message could be "style: fix typo and small tweaks";'
-        prompt += '- if the diff is adding documentation about XXX, the commit message could be "docs: add documentation for XXX";'
-        prompt += '- if the diff adds a new dependency called XXX, the commit message could be "chore: add new dependency XXX";'
-        prompt += '- if the diff makes changes to a build script, the commit message could be "build: change XXX to YYY";'
-        prompt += '- if the diff makes changes to a CI script, the commit message could be "ci: change XXX to YYY";\n\n'
+        prompt += f"These changes fall into changes of type '{category}', therefore, all suggestions for commit messages must be related to this category. The messages should also begin with the category name, followed by a colon and a space, i.e. '{category}: '.\n"
+    # else:
+    # prompt += "Here are some examples, in the format \"type of change\": \"example commit message\":\n"
+    # prompt += '- "fixes a bug on XXX": "fix: stop calling get_protos() on every cycle in XXX"\n'
+    # prompt += '- "dependencies were updated or installed": "chore: add requirements and update lib to 2.3"\n'
+    # prompt += '- "improves styling, fixes a typo or does general code cleanup in XXX": "style: fix typo, lint and small tweaks in XXX"\n'
+    # prompt += '- "adds documentation about XXX": "docs: add documentation for XXX"\n'
+    # prompt += 'If the diff consists of several major "operations", you can specify multiple categories and changes. For example:\n'
+    # prompt += '  - "fixes a bug *and* adds a new feature called XXX": "fix, feat: fix get_protos() bug and add new feat XXX"\n'
+    # prompt += '  - "adds *two* new features": "feat: update prompt with clearer examples for commit messages, suggest using both simultaneously"\n'
 
-    prompt += 'IMPORTANT: as the output you generate is meant to be parsed later on, RETURN ONLY FIVE LINES with the COMMIT MESSAGES strings, ONE PER LINE, and ABSOLUTELY NOTHING ELSE.\n\n##########\n'
-    prompt += diff.replace("@@", "")
+    prompt += '\nIMPORTANT: YOU MUST RETURN ONLY FIVE LINES with the COMMIT MESSAGES, ONE PER LINE, and ABSOLUTELY NOTHING ELSE.\n\n##########\n'
+    prompt += diff
     prompt += "##########\n"
 
     logger.debug(f'Prompt is: {prompt}')
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
-        messages=[{
-            "role": "system", "content": "You are a helpful assistant that generates commit messages for a subset of changes within a git repository." +
-            "The generated messages must be viable messages to be used as the git commit message that will describe the changes in the files." +
-            "The messages must be related and appropriate for the changes in the diff."}, {
-            "role": "user", "content": prompt}],
-        temperature=0.5,
+        messages=[{"role": "system", "content": "You are a helpful assistant"}, {"role": "user", "content": prompt}],
+        temperature=0.8,
     )
     logger.debug(f'Response is: {response}')
     return response['choices'][0]['message']['content']
@@ -246,12 +246,10 @@ if __name__ == "__main__":
             else:
                 raise e
 
-    logger.debug(f'Response for: {response}')
+    logger.debug(f'Assistant raw answer:\n{response}')
 
-    trans_table = str.maketrans({key: None for key in ["\t", "\r", "\n", "\"", "\\", "\'", "\b", "\f", "\a", "\v"]})
-    commit_messages = [
-        str(choice).translate(trans_table) for choice in response.strip().split("\n")]
-    commit_messages = [message.lower() for message in commit_messages]
+    clean_response = re.sub(r'(\s)+', r'\1', response)
+    commit_messages = [choice.lower().strip() for choice in clean_response.splitlines()]
     message, _ = pick.pick(commit_messages, "Pick an automated uncomplicated commit message suggestion:", indicator='=>', default_index=0)
 
     if not args.all:
