@@ -160,29 +160,31 @@ def trim_git_diff(diff):
 
 
 def send_request(diff, category):
-    first_prompt = textwrap.dedent("""Below, between lines containing hashtags, there's a git diff, consisting of the changes in files staged for a particular commit in a git repository.
+    prompt = textwrap.dedent("""Below, between lines containing hashtags, there's a git diff, consisting of the changes in files staged for a particular commit in a git repository.
 
-    Read the diff and return write five potential commit messages to describe the changes in the code. Sort them in descending order of importance and magnitude, with the most likely to be correct and the most likely to encompass as many changes as possible in a single sentence. Commit messages must be short and concise, and should be understandable by someone who is not familiar with the codebase. They must be written in the present tense, and must not contain any punctuation at the end. Commit messages must not be too specific, nor contain any code or parts of the code, nor mention specific names of objects, functions etc. (unless they're the only change), instead they should describe the overall change. Commit messages must begin with the main type introduced by the commit, """) # yapf: disable
+    Read the diff and write one potential commit messages that would describe the changes. The commit message must be short and concise, and should be understandable by someone who is not familiar with the codebase. It must be written in the present tense, and must not contain any punctuation at the end. Commit messages must describe all the changes at once, so they cannot be too specific. Instead a commit message should describe the overall change at once with a single sentence. Commit messages must begin with the type of change introduced by the commit, followed by a colon, a space, and the message itself. """) # yapf: disable
     if category:
-        first_prompt += f"which in this case is {category}, followed by a colon and a space.\n"
+        prompt += "In this case, the type of change is: " + category + "."
     else:
-        first_prompt += textwrap.dedent("""followed by a colon and a space. The possible types of changes are: "fix", "feat", "chore", "docs", "refactor", "style", "test", "per", "build", "ci", "wip", "misc".""") # yapf: disable
+        # TODO: fix this and pass all the possible categories in case the user specifies them
+        prompt += 'The possible types of changes are: "fix", "feat", "chore", "docs", "refactor", "style", "test", "per", "build", "ci", "wip", "misc".'
 
-    first_prompt += "\nIMPORTANT: YOU MUST RETURN EXACTLY TEN LINES, EACH ONE CONTAINING A SINGLE COMMIT MESSAGE and NOTHING ELSE."
-    first_prompt += f"\n\n###\n{diff}\n###\n"
-    logger.debug(f'Prompt is: {first_prompt}')
+    prompt += "\nIMPORTANT: your output will be evaluated by a machine learning model, so please make sure that you only return the messages themselves, one per line, without any other text."
+    prompt += f"\n\n###\n{diff}\n###\n"
+    logger.debug(f'Prompt is: {prompt}')
     response = openai.ChatCompletion.create(model="gpt-3.5-turbo",
-                                            temperature=0.5,
-                                            max_tokens=200,
+                                            n=5,
+                                            top_p=0.5,
+                                            max_tokens=30,
                                             messages=[
-                                                {"role": "system", "content": "You are a helpful assistant."},
-                                                {"role": "user", "content": first_prompt},])
+                                                {"role": "system", "content": "You are a helpful assistant generating content that will be parsed by another machine."},
+                                                {"role": "user", "content": prompt},])
 
     # TODO: automatically split a big diff into several commits,
     # asking the bot to summarize each major change, create a commit message for each,
     # then for each block of changes, we ask it to return which commit message it belongs to.
     logger.debug(f'Response is: {response}')
-    return response.choices[-1].message.content
+    return [choice.message.content for choice in response.choices]
 
 
 if __name__ == "__main__":
@@ -241,12 +243,12 @@ if __name__ == "__main__":
         else:
             categories = []
 
-    response = None
+    responses = None
     complexity = 3
-    while not response:
+    while not responses:
         try:
             diff = get_git_diff(complexity=complexity)
-            response = send_request(diff, category)
+            responses = send_request(diff, category)
         except Exception as e:
             if "This model's maximum context length is " in str(e):
                 logger.warning("Too many tokens! Trimming it down...")
@@ -257,9 +259,9 @@ if __name__ == "__main__":
             else:
                 raise e
 
-    logger.debug(f'Assistant raw answer:\n{response}')
-    clean_response = re.sub(r'(\s)+', r'\1', response)
-    commit_messages = [choice.lower().strip() for choice in clean_response.splitlines()]
+    logger.debug(f'Assistant raw answer:\n{responses}')
+    clean_responses = [re.sub(r'(\s)+', r'\1', r) for r in responses]
+    commit_messages = [choice.lower().strip() for choice in clean_responses]
     message, _ = pick.pick(commit_messages, "Pick a suggestion:", indicator='=>', default_index=0)
 
     # Make the commit with the chosen commit message
