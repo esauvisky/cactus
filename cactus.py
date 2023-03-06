@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import markdown2
 
 import openai
 import pick
@@ -160,34 +161,33 @@ def trim_git_diff(diff):
 
 
 def send_request(model, diff, category):
-    prompt = """
+    first_prompt = """
 Below, between lines containing hashtags, there's a git diff, consisting of the changes in files staged for a particular commit in a git repository.
 
-Your output must consist of five lines, each one containing a different commit message suggestion. The suggestions must be viable messages to be used as the git commit message that will describe the changes in the files, and must be related and appropriate for the changes in the diff. They should be written in imperative mood and in the present tense, should not contain any punctuation marks, special characters or emojis. The messages should be ordered from the most likely to the least likely alternative.\n"""
-    if category:
-        prompt += f"These changes fall into changes of type '{category}', therefore, all suggestions for commit messages must be related to this category. The messages should also begin with the category name, followed by a colon and a space, i.e. '{category}: '.\n"
-    # else:
-    # prompt += "Here are some examples, in the format \"type of change\": \"example commit message\":\n"
-    # prompt += '- "fixes a bug on XXX": "fix: stop calling get_protos() on every cycle in XXX"\n'
-    # prompt += '- "dependencies were updated or installed": "chore: add requirements and update lib to 2.3"\n'
-    # prompt += '- "improves styling, fixes a typo or does general code cleanup in XXX": "style: fix typo, lint and small tweaks in XXX"\n'
-    # prompt += '- "adds documentation about XXX": "docs: add documentation for XXX"\n'
-    # prompt += 'If the diff consists of several major "operations", you can specify multiple categories and changes. For example:\n'
-    # prompt += '  - "fixes a bug *and* adds a new feature called XXX": "fix, feat: fix get_protos() bug and add new feat XXX"\n'
-    # prompt += '  - "adds *two* new features": "feat: update prompt with clearer examples for commit messages, suggest using both simultaneously"\n'
-
-    prompt += '\nIMPORTANT: YOU MUST RETURN ONLY FIVE LINES with the COMMIT MESSAGES, ONE PER LINE, and ABSOLUTELY NOTHING ELSE.\n\n##########\n'
-    prompt += diff
-    prompt += "##########\n"
-
-    logger.debug(f'Prompt is: {prompt}')
+First, you must read the diff and identify what are the changes that the new code brings. Analyze the diff and tell us what the main changes consist of. Important: the changes must be described in a way that is understandable to a person who is not familiar with the codebase."""
+    first_prompt += f"\n\n###\n{diff}\n###\n"
+    logger.debug(f'Prompt is: {first_prompt}')
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "system", "content": "You are a helpful assistant"}, {"role": "user", "content": prompt}],
-        temperature=0.8,
-    )
+        model="gpt-3.5-turbo", temperature=0.8, max_tokens=200, messages=[
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": first_prompt},])
+    first_message = response.choices[-1].message
+    # TODO: automatically split a big diff based on the response into several commits
+
+    last_prompt = """Now, using your summary above and the actual differences, write five possible commit messages for the changes described in the diff. The commit messages must be written in the imperative mood, and must begin with the main type of change introduced by the commit, followed by a colon and a space. The possible types of changes, sorted from the most commonly used to the least commonly used are: "fix", "feat", "chore", "refactor", "style", "wip", "build", "docs", "test", "per", "ci", "misc". Try to encapsulate as many changes as possible in a single type and message. If you think that the changes are too different or complex to be described at once, you can use a comma-separated list of types of changes and descriptions, for example: if both a bug in get_response() was fixed alongside a new feature was added adding support for other filetypes, the commit message could be: "fix, feat: remove broken param from get_response(), allow to parse other filetypes besides JPG".
+
+    IMPORTANT: YOU MUST RETURN ONLY FIVE LINES with one COMMIT MESSAGE each, ONE PER LINE, and ABSOLUTELY NOTHING ELSE.
+    """
+    logger.debug(f'Prompt is: {last_prompt}')
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo", temperature=0.2, max_tokens=100, messages=[
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": first_prompt},
+            first_message,
+            {"role": "user", "content": last_prompt},])
+
     logger.debug(f'Response is: {response}')
-    return response['choices'][0]['message']['content']
+    return first_message.content, response.choices[-1].message.content
 
 
 if __name__ == "__main__":
@@ -230,12 +230,12 @@ if __name__ == "__main__":
         categories = args.categories.split(",")
         category, _ = pick.pick(categories, "Pick a category:", indicator='=>', default_index=0)
 
-    response = None
+    final_message = None
     complexity = 3
-    while not response:
+    while not final_message:
         try:
             diff = get_git_diff(all_changes=args.all, complexity=complexity)
-            response = send_request(args.model, diff, category)
+            first_message, final_message = send_request(args.model, diff, category)
         except Exception as e:
             if "This model's maximum context length is " in str(e):
                 logger.warning("Too many tokens! Trimming it down...")
@@ -246,11 +246,11 @@ if __name__ == "__main__":
             else:
                 raise e
 
-    logger.debug(f'Assistant raw answer:\n{response}')
-
-    clean_response = re.sub(r'(\s)+', r'\1', response)
+    logger.debug(f'Assistant raw answer:\n{final_message}')
+    clean_response = re.sub(r'(\s)+', r'\1', final_message)
     commit_messages = [choice.lower().strip() for choice in clean_response.splitlines()]
-    message, _ = pick.pick(commit_messages, "Pick an automated uncomplicated commit message suggestion:", indicator='=>', default_index=0)
+    parsed_summary = markdown2.markdown(first_message, extras=["fenced-code-blocks", "tables", "pyshell"], cli=True)
+    message, _ = pick.pick(commit_messages, f"Summary: {parsed_summary}\n\nSuggested commit messages:", indicator='=>', default_index=0)
 
     if not args.all:
         # Make the commit with the chosen commit message
