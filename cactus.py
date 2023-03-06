@@ -11,7 +11,6 @@ import os
 import re
 import subprocess
 import sys
-import markdown2
 
 import openai
 import pick
@@ -164,30 +163,19 @@ def send_request(model, diff, category):
     first_prompt = """
 Below, between lines containing hashtags, there's a git diff, consisting of the changes in files staged for a particular commit in a git repository.
 
-First, you must read the diff and identify what are the changes that the new code brings. Analyze the diff and tell us what the main changes consist of. Important: the changes must be described in a way that is understandable to a person who is not familiar with the codebase."""
+Read the diff and identify what are the changes that the new code brings. We will call these "change features". Sort the change features in descending order of importance and magnitude, while trying as much as possible to encapsulate as many changes as possible in a single change feature. Pick the top two, most important change features, and discard the rest. For each of them, write 5 different commit messages suggestions and present them sorted in descending order of likehood of matching the diff. We will call these "commit messages". Commit messages should be written in the imperative mood, beginning with the main type of change introduced by the commit, followed by a colon and a space. The possible types of changes, sorted from the most commonly used to the least commonly used are: "fix", "feat", "chore", "docs", "refactor", "style", "test", "per", "build", "ci", "wip", "misc". If you think that there are multiple major important features to describe within a single category, you can use a comma-separated list of types and descriptions, for example: if both a bug in get_response() was fixed and a new feature adding support for more filetypes was done at once, one of the ten possible commit message could be: "fix, feat: remove broken param from get_response(). allow parsing other filetypes.
+
+IMPORTANT: YOU MUST RETURN ONLY TEN LINES, with one COMMIT MESSAGE each, ONE PER LINE, and ABSOLUTELY NOTHING ELSE."""
     first_prompt += f"\n\n###\n{diff}\n###\n"
     logger.debug(f'Prompt is: {first_prompt}')
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo", temperature=0.8, max_tokens=200, messages=[
-            {"role": "system", "content": "You are a helpful assistant"},
+        model="gpt-3.5-turbo", temperature=0.5, max_tokens=200, messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": first_prompt},])
     first_message = response.choices[-1].message
     # TODO: automatically split a big diff based on the response into several commits
-
-    last_prompt = """Now, using your summary above and the actual differences, write five possible commit messages for the changes described in the diff. The commit messages must be written in the imperative mood, and must begin with the main type of change introduced by the commit, followed by a colon and a space. The possible types of changes, sorted from the most commonly used to the least commonly used are: "fix", "feat", "chore", "refactor", "style", "wip", "build", "docs", "test", "per", "ci", "misc". Try to encapsulate as many changes as possible in a single type and message. If you think that the changes are too different or complex to be described at once, you can use a comma-separated list of types of changes and descriptions, for example: if both a bug in get_response() was fixed alongside a new feature was added adding support for other filetypes, the commit message could be: "fix, feat: remove broken param from get_response(), allow to parse other filetypes besides JPG".
-
-    IMPORTANT: YOU MUST RETURN ONLY FIVE LINES with one COMMIT MESSAGE each, ONE PER LINE, and ABSOLUTELY NOTHING ELSE.
-    """
-    logger.debug(f'Prompt is: {last_prompt}')
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo", temperature=0.2, max_tokens=100, messages=[
-            {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": first_prompt},
-            first_message,
-            {"role": "user", "content": last_prompt},])
-
     logger.debug(f'Response is: {response}')
-    return first_message.content, response.choices[-1].message.content
+    return response.choices[-1].message.content
 
 
 if __name__ == "__main__":
@@ -230,12 +218,12 @@ if __name__ == "__main__":
         categories = args.categories.split(",")
         category, _ = pick.pick(categories, "Pick a category:", indicator='=>', default_index=0)
 
-    final_message = None
+    response = None
     complexity = 3
-    while not final_message:
+    while not response:
         try:
             diff = get_git_diff(all_changes=args.all, complexity=complexity)
-            first_message, final_message = send_request(args.model, diff, category)
+            response = send_request(args.model, diff, category)
         except Exception as e:
             if "This model's maximum context length is " in str(e):
                 logger.warning("Too many tokens! Trimming it down...")
@@ -246,11 +234,10 @@ if __name__ == "__main__":
             else:
                 raise e
 
-    logger.debug(f'Assistant raw answer:\n{final_message}')
-    clean_response = re.sub(r'(\s)+', r'\1', final_message)
+    logger.debug(f'Assistant raw answer:\n{response}')
+    clean_response = re.sub(r'(\s)+', r'\1', response)
     commit_messages = [choice.lower().strip() for choice in clean_response.splitlines()]
-    parsed_summary = markdown2.markdown(first_message, extras=["fenced-code-blocks", "tables", "pyshell"], cli=True)
-    message, _ = pick.pick(commit_messages, f"Summary: {parsed_summary}\n\nSuggested commit messages:", indicator='=>', default_index=0)
+    message, _ = pick.pick(commit_messages, "Pick a suggestion:", indicator='=>', default_index=0)
 
     if not args.all:
         # Make the commit with the chosen commit message
