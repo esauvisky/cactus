@@ -159,21 +159,29 @@ def trim_git_diff(diff):
     return "\n".join(trimmed_files)
 
 
-def send_request(model, diff, category):
-    first_prompt = """
-Below, between lines containing hashtags, there's a git diff, consisting of the changes in files staged for a particular commit in a git repository.
+def send_request(diff, category):
+    first_prompt = textwrap.dedent("""Below, between lines containing hashtags, there's a git diff, consisting of the changes in files staged for a particular commit in a git repository.
 
-Read the diff and identify what are the changes that the new code brings. We will call these "change features". Sort the change features in descending order of importance and magnitude, while trying as much as possible to encapsulate as many changes as possible in a single change feature. Pick the top two, most important change features, and discard the rest. For each of them, write 5 different commit messages suggestions and present them sorted in descending order of likehood of matching the diff. We will call these "commit messages". Commit messages should be written in the imperative mood, beginning with the main type of change introduced by the commit, followed by a colon and a space. The possible types of changes, sorted from the most commonly used to the least commonly used are: "fix", "feat", "chore", "docs", "refactor", "style", "test", "per", "build", "ci", "wip", "misc". If you think that there are multiple major important features to describe within a single category, you can use a comma-separated list of types and descriptions, for example: if both a bug in get_response() was fixed and a new feature adding support for more filetypes was done at once, one of the ten possible commit message could be: "fix, feat: remove broken param from get_response(). allow parsing other filetypes.
+    Read the diff and identify what are the changes that the new code brings. We will call these "change features". Sort the change features in descending order of importance and magnitude, while trying as much as possible to encapsulate as many changes as possible in a single change feature. Pick the top two, most important change features, and discard the rest. For each of them, write 5 different commit messages suggestions and present them sorted in descending order of likehood of matching the diff. We will call these "commit messages". Commit messages should be written in the imperative mood, beginning with the main type of change introduced by the commit, """) # yapf: disable
+    if category:
+        first_prompt += f"which in this case is {category}, followed by a colon and a space.\n"
+    else:
+        first_prompt += textwrap.dedent("""followed by a colon and a space. The possible types of changes, sorted from the most commonly used to the least commonly used are: "fix", "feat", "chore", "docs", "refactor", "style", "test", "per", "build", "ci", "wip", "misc". If you think that there are multiple major important features to describe within a single category, you can use a comma-separated list of types and descriptions, for example: if both a bug in get_response() was fixed and a new feature adding support for more filetypes was done at once, one of the ten possible commit message could be: "fix, feat: remove broken param from get_response(). allow parsing other filetypes.
+        """)
 
-IMPORTANT: YOU MUST RETURN ONLY TEN LINES, with one COMMIT MESSAGE each, ONE PER LINE, and ABSOLUTELY NOTHING ELSE."""
+    first_prompt += "\nIMPORTANT: YOU MUST RETURN ONLY TEN LINES, with one COMMIT MESSAGE each, ONE PER LINE, and ABSOLUTELY NOTHING ELSE."
     first_prompt += f"\n\n###\n{diff}\n###\n"
     logger.debug(f'Prompt is: {first_prompt}')
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo", temperature=0.5, max_tokens=200, messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": first_prompt},])
-    first_message = response.choices[-1].message
-    # TODO: automatically split a big diff based on the response into several commits
+    response = openai.ChatCompletion.create(model="gpt-3.5-turbo",
+                                            temperature=0.5,
+                                            max_tokens=200,
+                                            messages=[
+                                                {"role": "system", "content": "You are a helpful assistant."},
+                                                {"role": "user", "content": first_prompt},])
+
+    # TODO: automatically split a big diff into several commits,
+    # asking the bot to summarize each major change, create a commit message for each,
+    # then for each block of changes, we ask it to return which commit message it belongs to.
     logger.debug(f'Response is: {response}')
     return response.choices[-1].message.content
 
@@ -182,7 +190,6 @@ if __name__ == "__main__":
 
     class Formatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
         pass
-
     PARSER = argparse.ArgumentParser(prog="cactus", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     PARSER.add_argument("-d", "--debug", action="store_true", help="Show debug messages")
     group = PARSER.add_mutually_exclusive_group()
@@ -223,7 +230,7 @@ if __name__ == "__main__":
     while not response:
         try:
             diff = get_git_diff(all_changes=args.all, complexity=complexity)
-            response = send_request(args.model, diff, category)
+            response = send_request(diff, category)
         except Exception as e:
             if "This model's maximum context length is " in str(e):
                 logger.warning("Too many tokens! Trimming it down...")
