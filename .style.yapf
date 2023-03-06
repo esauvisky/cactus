@@ -11,7 +11,7 @@ align_closing_bracket_with_visual_indent=True
 #        'this is the second element of a tuple'):
 #            value,
 #   }
-allow_multiline_dictionary_keys=True
+allow_multiline_dictionary_keys=False
 
 # Allow lambdas to be formatted on more than one line.
 allow_multiline_lambdas=False
@@ -263,7 +263,7 @@ split_before_first_argument=False
 split_before_logical_operator=True
 
 # Split named assignments onto individual lines.
-split_before_named_assigns=False
+split_before_named_assigns=True
 
 # Set to True to split list comprehensions and generators that have
 # non-trivial expressions and multiple clauses before each of these
@@ -284,14 +284,14 @@ split_complex_comprehension=True
 split_all_top_level_comma_separated_values=False
 
 # The penalty for splitting right after the opening bracket.
-split_penalty_after_opening_bracket=3000
+split_penalty_after_opening_bracket=2000
 
 # The penalty for splitting the line after a unary operator.
 split_penalty_after_unary_operator=400
 
 # The penalty of splitting the line around the '+', '-', '*', '/', '//',
 # ``%``, and '@' operators.
-split_penalty_arithmetic_operator=10
+split_penalty_arithmetic_operator=100
 
 # The penalty for splitting right before an if expression.
 split_penalty_before_if_expr=200
