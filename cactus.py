@@ -174,7 +174,7 @@ def send_request(diff, category):
     logger.debug(f'Prompt is: {prompt}')
     response = openai.ChatCompletion.create(model="gpt-3.5-turbo",
                                             n=10,
-                                            top_p=0.1,
+                                            top_p=0.5,
                                             max_tokens=50,
                                             messages=[
                                                 {"role": "system", "content": "You are a helpful assistant writing messages for git commits."},
@@ -254,7 +254,7 @@ if __name__ == "__main__":
                 raise e
 
     logger.debug(f'Assistant raw answer:\n{responses}')
-    clean_responses = [re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses]
+    clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
     commit_messages = [choice.lower().strip() for choice in clean_responses]
     message, _ = pick.pick(commit_messages, "Pick a suggestion:", indicator='=>', default_index=0)
 
