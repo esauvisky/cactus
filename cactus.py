@@ -173,11 +173,11 @@ def send_request(diff, category):
     prompt += f"\n\n###\n{diff}\n###\n"
     logger.debug(f'Prompt is: {prompt}')
     response = openai.ChatCompletion.create(model="gpt-3.5-turbo",
-                                            n=5,
-                                            top_p=0.5,
-                                            max_tokens=30,
+                                            n=10,
+                                            top_p=0.1,
+                                            max_tokens=50,
                                             messages=[
-                                                {"role": "system", "content": "You are a helpful assistant generating content that will be parsed by another machine."},
+                                                {"role": "system", "content": "You are a helpful assistant writing messages for git commits."},
                                                 {"role": "user", "content": prompt},])
 
     # TODO: automatically split a big diff into several commits,
@@ -199,12 +199,6 @@ if __name__ == "__main__":
     setup_parser = sub_parsers.add_parser("setup", help="Initial setup of your OpenAI token")
     pick_parser = sub_parsers.add_parser("pick",
                                          help="Generates five commit messages for staged changes and lets you choose one")
-
-    pick_parser.add_argument("-m",
-                             "--model",
-                             default="text-davinci-003",
-                             choices=["text-curie-001", "text-babbage-001", "text-davinci-003", "text-ada-001"],
-                             help="OpenAI model to use")
 
     pick_parser.add_argument("-c",
                              "--categories",
@@ -260,7 +254,7 @@ if __name__ == "__main__":
                 raise e
 
     logger.debug(f'Assistant raw answer:\n{responses}')
-    clean_responses = [re.sub(r'(\s)+', r'\1', r) for r in responses]
+    clean_responses = [re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses]
     commit_messages = [choice.lower().strip() for choice in clean_responses]
     message, _ = pick.pick(commit_messages, "Pick a suggestion:", indicator='=>', default_index=0)
 
