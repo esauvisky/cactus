@@ -17,6 +17,29 @@ import textwrap
 import openai
 import pick
 from loguru import logger
+PROMPT_TEMPLATE_FILENAMES = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Arrange Each message must be in present tense, without punctuation at the end, and easily comprehensible by the team. For changes related to a particular module, file, or library, start the message with its name or identifier, followed by a colon and a space, not including file extensions, if any (e.g., 'main: add parameters for verbosity'). Create multiple diverse alternatives to account for potential misunderstandings. Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
+
+    1. Highlights the significance of brevity and precision within commit messages.
+    2. Dictates the use of present tense and the absence of punctuation at the end.
+    3. Indicates starting commit messages with the module, file, or library's name or identifier for related changes.
+    4. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
+    5. Requests only the commit message in the response, as it will be assessed by an AI model."""
+
+PROMPT_TEMPLATE_GITLOG = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Arrange Each message must be in present tense, without punctuation at the end, and easily comprehensible by the team. To maintain consistency within the repository, review the list of the latest commits found before the diff but after the line with five dashes ("-----") and use the same commit message style as the convention for the message you generate. This ensures generated commit messages adhere to the repository's preferred style. Create multiple diverse alternatives to account for potential misunderstandings. Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
+
+    1. Highlights the significance of brevity and precision within commit messages.
+    2. Dictates the use of present tense and the absence of punctuation at the end.
+    3. Underscores consistency with the repository's commit message conventions.
+    4. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
+    5. Requests only the commit message in the response, as it will be assessed by an AI model."""
+
+PROMPT_TEMPLATE_CONVCOMMITS = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Each message must be in present tense, without punctuation at the end, and easily comprehensible by the team. Begin every message with a relevant keyword from the Conventional Commits styleguide, such as "fix:", "feat:", "chore:", "docs:", "style:", "refactor:", "perf:", or "test:". Create multiple diverse alternatives to account for potential misunderstandings. Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
+
+    1. Highlights the significance of brevity and precision within commit messages.
+    2. Dictates the use of present tense and the absence of punctuation at the end.
+    3. Underscores adherence to the Conventional Commits styleguide.
+    4. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
+    5. Requests only the commit message in the response, as it will be assessed by an AI model."""
 
 
 def sort_strings_by_similarity(string_list):
@@ -78,9 +101,8 @@ def get_git_diff(complexity=3):
         logger.error("No staged changes found. Please stage changes first or pass --all.")
         sys.exit(1)
 
-    cmd = f"git --no-pager diff --ignore-all-space --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --unified={complexity if complexity > 0 else 0}"
-    cmd += " --staged"
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    cmd = f"git --no-pager diff --staged --ignore-all-space --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --unified={complexity if complexity > 0 else 0}"
+    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     if result.returncode != 0:
         logger.error("Failed to get git diff: %s", result.stderr.decode().strip())
         sys.exit(1)
@@ -105,7 +127,7 @@ def get_git_diff(complexity=3):
             file_header = line
         elif line.startswith("@@"):
             if block_header:
-                file_blocks.append((block_header, block_lines))
+                file_blocks.append((block_header + "\n", block_lines))
                 block_lines = []
             block_header = line
         elif line.startswith("---") or line.startswith("+++") or line.startswith("index"):
@@ -181,15 +203,14 @@ def trim_git_diff(diff):
 
 
 def send_request(diff):
-    prompt = textwrap.dedent("""Craft a well-structured and concise commit message that accurately encapsulates the changes described in the given git diff, specifically between lines marked with hashtags. The commit message should employ present tense, omit punctuation at the end, and be easily understood by the team. For changes related to a particular module, file, or library, start the message with its name or identifier, followed by a colon and a space, not including file extensions, if any (e.g., 'main: add parameters for verbosity'). When revising the prompt, ensure that it:
+    prompt = PROMPT_TEMPLATE_CONVCOMMITS
 
-    1. Highlights the importance of brevity and clarity in the commit message.
-    2. Specifies the use of present tense and the exclusion of punctuation at the end.
-    3. Encourages condensing all changes into a single sentence.
-    4. Advises to begin with the affected module, file, or library's name if applicable, not including the file extension, followed by a colon and a space.
-    5. Requests only the commit message in the response, as it will be assessed by an AI model.""")
-
-    prompt += f"\n\n###\n{diff}\n###\n"
+    result = subprocess.run(
+        "git log -n 10 --pretty=format:'%s'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
+    )
+    last_commits = result.stdout.decode().strip()
+    prompt += f"\n\n-----\n{last_commits}"
+    prompt += f"\n\n#####\n{diff}\n#####"
     logger.debug(f'Prompt is: {prompt}')
     response = openai.ChatCompletion.create(
         model="gpt-4",
@@ -258,7 +279,7 @@ if __name__ == "__main__":
 
     logger.debug(f'Assistant raw answer:\n{responses}')
     clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
-    commit_messages = [choice.lower().strip() for choice in clean_responses]
+    commit_messages = [choice for choice in clean_responses]
     message, _ = pick.pick(commit_messages, "Pick a suggestion:", indicator='=>', default_index=0)
 
     # Make the commit with the chosen commit message
