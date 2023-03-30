@@ -92,6 +92,7 @@ def load_openai_token():
     except FileNotFoundError:
         return None
 
+
 def preprocess_diff(diff):
     lines = diff.split('\n')
     processed_lines = []
@@ -116,6 +117,7 @@ def preprocess_diff(diff):
 
     return joined_lines
 
+
 def get_git_diff(complexity=3):
     # Check if there are staged changes
     result = subprocess.run("git diff --cached --quiet --exit-code", shell=True)
@@ -124,7 +126,10 @@ def get_git_diff(complexity=3):
         logger.error("No staged changes found. Please stage changes first or pass --all.")
         sys.exit(1)
 
-    cmd = f"git --no-pager diff --staged --ignore-all-space --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --unified={complexity if complexity > 0 else 0}"
+    cmd = "git --no-pager diff --staged --ignore-all-space --ignore-all-space --ignore-blank-lines --ignore-space-change "
+    cmd += "--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv "
+    cmd += f"--unified={complexity if complexity > 0 else 0}"
+
     result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     if result.returncode != 0:
         logger.error("Failed to get git diff: %s", result.stderr.decode().strip())
@@ -229,33 +234,28 @@ def send_request(diff):
     prompt = PROMPT_TEMPLATE_CONVCOMMITS
 
     result = subprocess.run(
-        "git log -n 10 --pretty=format:'%s'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
-    )
+        "git log -n 10 --pretty=format:'%s'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     last_commits = result.stdout.decode().strip()
     prompt += f"\n\n-----\n{last_commits}"
     prompt += f"\n\n#####\n{diff}\n#####"
     logger.debug(f'Prompt is: {prompt}')
 
-    # loop through temperatures and yield each choice message content
-    # also log the temperature, score and response
     for n, temp in [(1, 0.1), (3, 1)]:
         response = openai.ChatCompletion.create(
             model="gpt-4",
             n=n,
             top_p=1,
             temperature=temp,
-            # stop=["\n"],
             max_tokens=100,
             messages=[{
-                "role": "system", "content": "You are a helpful assistant specialized in writing git commit messages."
+                "role": "system",
+                "content": "You are a helpful assistant specialized in writing git commit messages.",
             }, {
-                "role": "user", "content": prompt
-            }]
-        )
+                "role": "user",
+                "content": prompt,
+            }])
         for choice in response.choices:
             logger.debug(f"temp: {temp}, response: {choice.message.content.splitlines()}")
-            # cleanup any extra newlines, periods at the end, special characters
-            # and split into lines
             for line in choice.message.content.splitlines():
                 if not line:
                     continue
@@ -273,8 +273,7 @@ if __name__ == "__main__":
     sub_parsers = PARSER.add_subparsers(dest="command")
     setup_parser = sub_parsers.add_parser("setup", help="Initial setup of the configuration file")
     pick_parser = sub_parsers.add_parser(
-        "pick", help="Generates commit messages for staged changes and lets you choose one (default)"
-    )
+        "pick", help="Generates commit messages for staged changes and lets you choose one (default)")
 
     sub_parsers.default = "pick"
     args = PARSER.parse_args()
