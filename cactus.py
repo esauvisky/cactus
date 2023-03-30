@@ -92,6 +92,29 @@ def load_openai_token():
     except FileNotFoundError:
         return None
 
+def preprocess_diff(diff):
+    lines = diff.split('\n')
+    processed_lines = []
+
+    for line in lines:
+        # Skip file name and index lines
+        if line.startswith('---') or line.startswith('+++') or line.startswith('index'):
+            continue
+        elif line.startswith('@@'):
+            # Extract line numbers and count from the @@ line
+            numbers = re.findall(r'\d+', line)
+            if len(numbers) == 4:
+                from_line, from_count, to_line, to_count = numbers
+                processed_lines.append(f'Changed lines {from_line}-{int(from_line) + int(from_count) - 1} to lines {to_line}-{int(to_line) + int(to_count) - 1}')
+        elif line.startswith('-'):
+            processed_lines.append(f'Removed: "{line[1:].strip()}"')
+        elif line.startswith('+'):
+            processed_lines.append(f'Added: "{line[1:].strip()}"')
+
+    # Combine processed lines into a single string
+    joined_lines = '; '.join(processed_lines)
+
+    return joined_lines
 
 def get_git_diff(complexity=3):
     # Check if there are staged changes
