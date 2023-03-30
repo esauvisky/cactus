@@ -212,22 +212,31 @@ def send_request(diff):
     prompt += f"\n\n-----\n{last_commits}"
     prompt += f"\n\n#####\n{diff}\n#####"
     logger.debug(f'Prompt is: {prompt}')
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        n=5,
-        top_p=1,
-        max_tokens=100,
-        messages=[{
-            "role": "system", "content": "You are a senior developer specialized in writing git commit messages."
-        }, {
-            "role": "user", "content": prompt
-        }])
 
-    # TODO: automatically split a big diff into several commits,
-    # asking the bot to summarize each major change, create a commit message for each,
-    # then for each block of changes, we ask it to return which commit message it belongs to.
-    logger.debug(f'Response is: {response}')
-    return [choice.message.content for choice in response.choices]
+    # loop through temperatures and yield each choice message content
+    # also log the temperature, score and response
+    for n, temp in [(1, 0.1), (3, 1)]:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            n=n,
+            top_p=1,
+            temperature=temp,
+            # stop=["\n"],
+            max_tokens=100,
+            messages=[{
+                "role": "system", "content": "You are a helpful assistant specialized in writing git commit messages."
+            }, {
+                "role": "user", "content": prompt
+            }]
+        )
+        for choice in response.choices:
+            logger.debug(f"temp: {temp}, response: {choice.message.content.splitlines()}")
+            # cleanup any extra newlines, periods at the end, special characters
+            # and split into lines
+            for line in choice.message.content.splitlines():
+                if not line:
+                    continue
+                yield line.strip(" .,\n")
 
 
 if __name__ == "__main__":
@@ -241,7 +250,8 @@ if __name__ == "__main__":
     sub_parsers = PARSER.add_subparsers(dest="command")
     setup_parser = sub_parsers.add_parser("setup", help="Initial setup of the configuration file")
     pick_parser = sub_parsers.add_parser(
-        "pick", help="Generates 5 commit messages for staged changes and lets you choose one (default)")
+        "pick", help="Generates commit messages for staged changes and lets you choose one (default)"
+    )
 
     sub_parsers.default = "pick"
     args = PARSER.parse_args()
