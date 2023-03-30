@@ -17,7 +17,7 @@ import textwrap
 import openai
 import pick
 from loguru import logger
-PROMPT_TEMPLATE_FILENAMES = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Arrange Each message must be in present tense, without punctuation at the end, and easily comprehensible by the team. For changes related to a particular module, file, or library, start the message with its name or identifier, followed by a colon and a space, not including file extensions, if any (e.g., 'main: add parameters for verbosity'). Create multiple diverse alternatives to account for potential misunderstandings. Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
+PROMPT_TEMPLATE_FILENAMES = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Arrange Each message must be in present tense, without punctuation at the end, and easily comprehensible by the team. For changes related to a particular module, file, or library, start the message with its name or identifier, followed by a colon and a space, not including file extensions, if any (e.g., 'main: add parameters for verbosity'). Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
 
     1. Highlights the significance of brevity and precision within commit messages.
     2. Dictates the use of present tense and the absence of punctuation at the end.
@@ -25,7 +25,7 @@ PROMPT_TEMPLATE_FILENAMES = """Craft a commit message that provide an accurate s
     4. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
     5. Requests only the commit message in the response, as it will be assessed by an AI model."""
 
-PROMPT_TEMPLATE_GITLOG = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Arrange Each message must be in present tense, without punctuation at the end, and easily comprehensible by the team. To maintain consistency within the repository, review the list of the latest commits found before the diff but after the line with five dashes ("-----") and use the same commit message style as the convention for the message you generate. This ensures generated commit messages adhere to the repository's preferred style. Create multiple diverse alternatives to account for potential misunderstandings. Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
+PROMPT_TEMPLATE_GITLOG = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Arrange Each message must be in present tense, without punctuation at the end, and easily comprehensible by the team. To maintain consistency within the repository, review the list of the latest commits found before the diff but after the line with five dashes ("-----") and use the same commit message style as the convention for the message you generate. This ensures generated commit messages adhere to the repository's preferred style. Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
 
     1. Highlights the significance of brevity and precision within commit messages.
     2. Dictates the use of present tense and the absence of punctuation at the end.
@@ -33,7 +33,7 @@ PROMPT_TEMPLATE_GITLOG = """Craft a commit message that provide an accurate summ
     4. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
     5. Requests only the commit message in the response, as it will be assessed by an AI model."""
 
-PROMPT_TEMPLATE_CONVCOMMITS = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Each message must be in present tense, without punctuation at the end, and easily comprehensible by the team. Begin every message with a relevant keyword from the Conventional Commits styleguide, such as "fix:", "feat:", "chore:", "docs:", "style:", "refactor:", "perf:", or "test:". Create multiple diverse alternatives to account for potential misunderstandings. Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
+PROMPT_TEMPLATE_CONVCOMMITS = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Each message MUST be in present tense, without punctuation at the end, and easily comprehensible by the team. Commits MUST be prefixed with a type from the Conventional Commits styleguide, followed by a colon and a space. An optional scope MAY be provided after a type, describing a section of the codebase enclosed in parent­hesis, e.g., "fix(pa­rser): ". Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
 
     1. Highlights the significance of brevity and precision within commit messages.
     2. Dictates the use of present tense and the absence of punctuation at the end.
@@ -240,12 +240,13 @@ def send_request(diff):
     prompt += f"\n\n#####\n{diff}\n#####"
     logger.debug(f'Prompt is: {prompt}')
 
-    for n, temp in [(1, 0.1), (3, 1)]:
+    for n, temp in [(1, 0.1), (3, 0.5), (4, 1), (2, 1.5)]:
         response = openai.ChatCompletion.create(
             model="gpt-4",
             n=n,
             top_p=1,
             temperature=temp,
+            stop=["\n"],
             max_tokens=100,
             messages=[{
                 "role": "system",
