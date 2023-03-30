@@ -17,29 +17,59 @@ import textwrap
 import openai
 import pick
 from loguru import logger
-PROMPT_TEMPLATE_FILENAMES = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Arrange Each message must be in present tense, without punctuation at the end, and easily comprehensible by the team. For changes related to a particular module, file, or library, start the message with its name or identifier, followed by a colon and a space, not including file extensions, if any (e.g., 'main: add parameters for verbosity'). Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
 
+
+
+PROMPT_PREFIX_SINGLE = "Craft a well-structured and concise commit message that accurately encapsulates the changes described in the given git diff, specifically between lines marked with hashtags. The commit message should employ present tense, without punctuation at the end, and be easily comprehensible by the team. "
+PROMPT_PREFIX_MULTIPLE = "Craft distinct and concise commit messages that provide an accurate summary of the changes found in the following git diff, specifically targeting the lines marked with hashtags. Each message MUST be in present tense, without punctuation at the end, and be easily comprehensible by the team. "
+
+PROMPT_TEMPLATE_FILENAMES = "For changes related to a particular module, file, or library, start the message with its name or identifier, followed by a colon and a space, not including file extensions, if any (e.g., 'main: add parameters for verbosity')."
+PROMPT_TEMPLATE_GITLOG = "To maintain consistency within the repository, review the list of the latest commits found before the diff but after the line with five dashes ('-----') and use the same commit message style as the convention for messages you generate. This ensures generated commit messages adhere to the repository's preferred style. "
+PROMPT_TEMPLATE_CONVCOMMITS = "Commits MUST be prefixed with a type from the Conventional Commits styleguide, followed by a colon and a space. An optional scope MAY be provided after a type, describing a section of the codebase enclosed in parent­hesis, e.g., 'fix(parser): '. "
+
+PROMPT_SUFFIX_SINGLE = "Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Upon revising the message, confirm that it:\n"
+PROMPT_SUFFIX_MULTIPLE = "Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Create multiple diverse alternatives to account for potential misunderstandings and shuffle the messages order. Upon revising each message, confirm that it:\n"
+
+PROMPT_CHECKLIST_PREFIX = """
     1. Highlights the significance of brevity and precision within commit messages.
     2. Dictates the use of present tense and the absence of punctuation at the end.
-    3. Indicates starting commit messages with the module, file, or library's name or identifier for related changes.
-    4. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
-    5. Requests only the commit message in the response, as it will be assessed by an AI model."""
+    3. Describe all alterations within a single sentence."""
+PROMPT_CHECKLIST_FILENAMES = """
+    4. Indicates starting commit messages with the module, file, or library's name or identifier for related changes."""
+PROMPT_CHECKIST_GITLOG = """
+    4. Underscores consistency with the repository's commit message conventions."""
+PROMPT_CHECKLIST_CONVCOMMITS = """
+    4. Underscores adherence to the Conventional Commits styleguide."""
+PROMPT_CHECKLIST_SUFFIX_SINGLE = """
+    5. Requests only the commit message in the response, in a single line, as it will be assessed by an AI model."""
+PROMPT_CHECKLIST_SUFFIX_MULTIPLE = """
+    5. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
+    6. Requests only the commit messages in the response, one per line, as they will be assessed by an AI model."""
 
-PROMPT_TEMPLATE_GITLOG = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Arrange Each message must be in present tense, without punctuation at the end, and easily comprehensible by the team. To maintain consistency within the repository, review the list of the latest commits found before the diff but after the line with five dashes ("-----") and use the same commit message style as the convention for the message you generate. This ensures generated commit messages adhere to the repository's preferred style. Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
+def generate_prompt_template(prompt_type, template_type):
+    prompt = PROMPT_PREFIX_SINGLE if prompt_type == "single" else PROMPT_PREFIX_MULTIPLE
 
-    1. Highlights the significance of brevity and precision within commit messages.
-    2. Dictates the use of present tense and the absence of punctuation at the end.
-    3. Underscores consistency with the repository's commit message conventions.
-    4. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
-    5. Requests only the commit message in the response, as it will be assessed by an AI model."""
+    if template_type == "filenames":
+        prompt += PROMPT_TEMPLATE_FILENAMES
+    elif template_type == "gitlog":
+        prompt += PROMPT_TEMPLATE_GITLOG
+    else:
+        prompt += PROMPT_TEMPLATE_CONVCOMMITS
 
-PROMPT_TEMPLATE_CONVCOMMITS = """Craft a commit message that provide an accurate summary of the changes found in the provided git diff, specifically targeting the lines marked with hashtags. Each message MUST be in present tense, without punctuation at the end, and easily comprehensible by the team. Commits MUST be prefixed with a type from the Conventional Commits styleguide, followed by a colon and a space. An optional scope MAY be provided after a type, describing a section of the codebase enclosed in parent­hesis, e.g., "fix(pa­rser): ". Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with "-" or "+" signify the actual modifications. Upon revising the prompt, confirm that it:
+    prompt += PROMPT_SUFFIX_SINGLE if prompt_type == "single" else PROMPT_SUFFIX_MULTIPLE
 
-    1. Highlights the significance of brevity and precision within commit messages.
-    2. Dictates the use of present tense and the absence of punctuation at the end.
-    3. Underscores adherence to the Conventional Commits styleguide.
-    4. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
-    5. Requests only the commit message in the response, as it will be assessed by an AI model."""
+    prompt += PROMPT_CHECKLIST_PREFIX
+
+    if template_type == "filenames":
+        prompt += PROMPT_CHECKLIST_FILENAMES
+    elif template_type == "gitlog":
+        prompt += PROMPT_CHECKIST_GITLOG
+    else:
+        prompt += PROMPT_CHECKLIST_CONVCOMMITS
+
+    prompt += PROMPT_CHECKLIST_SUFFIX_SINGLE if prompt_type == "single" else PROMPT_CHECKLIST_SUFFIX_MULTIPLE
+
+    return prompt
 
 
 def sort_strings_by_similarity(string_list):
@@ -231,23 +261,27 @@ def trim_git_diff(diff):
 
 
 def send_request(diff):
-    prompt = PROMPT_TEMPLATE_CONVCOMMITS
+    for n, temp in [(1, t) for t in [0.0, 0.25, 0.5]] + [(2, t) for t in [0.75, 1.0, 1.25]]:
+        if temp > 0.5:
+            prompt = generate_prompt_template("multiple", "convcommits")
+        else:
+            prompt = generate_prompt_template("single", "convcommits")
 
-    result = subprocess.run(
-        "git log -n 10 --pretty=format:'%s'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    last_commits = result.stdout.decode().strip()
-    prompt += f"\n\n-----\n{last_commits}"
-    prompt += f"\n\n#####\n{diff}\n#####"
-    logger.debug(f'Prompt is: {prompt}')
+        logger.trace(f'Template is: {prompt}')
+        result = subprocess.run(
+            "git log -n 5 --pretty=format:'%s'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        last_commits = result.stdout.decode().strip()
+        prompt += f"\n\n-----\n{last_commits}"
+        prompt += f"\n\n#####\n{diff}\n#####"
 
-    for n, temp in [(1, 0.1), (3, 0.5), (4, 1), (2, 1.5)]:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            # model="gpt-4",
+            model="gpt-3.5-turbo",
             n=n,
             top_p=1,
             temperature=temp,
             stop=["\n"],
-            max_tokens=100,
+            max_tokens=50,
             messages=[{
                 "role": "system",
                 "content": "You are a helpful assistant specialized in writing git commit messages.",
