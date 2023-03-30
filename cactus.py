@@ -160,24 +160,22 @@ def trim_git_diff(diff):
 
 
 def send_request(diff, category):
-    prompt = textwrap.dedent("""Below, between lines containing hashtags, there's a git diff, consisting of the changes in files staged for a particular commit in a git repository.
+    prompt = textwrap.dedent("""Craft a well-structured and concise commit message that accurately encapsulates the changes described in the given git diff, specifically between lines marked with hashtags. The commit message should employ present tense, omit punctuation at the end, and be easily understood by the team. For changes related to a particular module, file, or library, start the message with its name, followed by a colon and a space (e.g., 'main: add parameters for verbosity'). When revising the prompt, ensure that it:
 
-    Read the diff and write one potential commit messages that would describe the changes. The commit message must be short and concise, and should be understandable by someone who is not familiar with the codebase. It must be written in the present tense, and must not contain any punctuation at the end. Commit messages must describe all the changes at once, so they cannot be too specific. Instead a commit message should describe the overall change at once with a single sentence. Commit messages must begin with the type of change introduced by the commit, followed by a colon, a space, and the message itself. """) # yapf: disable
-    if category:
-        prompt += "In this case, the type of change is: " + category + "."
-    else:
-        # TODO: fix this and pass all the possible categories in case the user specifies them
-        prompt += 'The possible types of changes are: "fix", "feat", "chore", "docs", "refactor", "style", "test", "per", "build", "ci", "wip", "misc".'
+1. Highlights the importance of brevity and clarity in the commit message.
+2. Specifies the use of present tense and the exclusion of punctuation at the end.
+3. Encourages condensing all changes into a single sentence.
+4. Advises to begin with the affected module, file, or library's name if applicable, followed by a colon and a space.
+5. Requests only the commit message in the response, as it will be assessed by an AI model.""") # yapf: disable
 
-    prompt += "\nIMPORTANT: your output will be evaluated by a machine learning model, so please make sure that you only return the messages themselves, one per line, without any other text."
     prompt += f"\n\n###\n{diff}\n###\n"
     logger.debug(f'Prompt is: {prompt}')
-    response = openai.ChatCompletion.create(model="gpt-3.5-turbo",
+    response = openai.ChatCompletion.create(model="gpt-4",
                                             n=10,
-                                            top_p=0.5,
-                                            max_tokens=50,
+                                            top_p=1,
+                                            max_tokens=100,
                                             messages=[
-                                                {"role": "system", "content": "You are a helpful assistant writing messages for git commits."},
+                                                {"role": "system", "content": "You are a senior developer specialized in writing git commit messages."},
                                                 {"role": "user", "content": prompt},])
 
     # TODO: automatically split a big diff into several commits,
