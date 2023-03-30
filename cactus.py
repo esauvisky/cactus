@@ -7,6 +7,7 @@ __version__ = "1.1.0"
 __license__ = "MIT"
 
 import argparse
+import difflib
 import os
 import re
 import subprocess
@@ -16,6 +17,26 @@ import textwrap
 import openai
 import pick
 from loguru import logger
+
+
+def sort_strings_by_similarity(string_list):
+    similarity = {}
+
+    for i, string1 in enumerate(string_list):
+        max_similarity = 0
+
+        for j, string2 in enumerate(string_list):
+            if i != j:
+                dist = difflib.SequenceMatcher(string1, string2).get_matching_blocks()
+                similarity.setdefault(i, {})[j] = dist
+                if dist > max_similarity:
+                    max_similarity = dist
+
+        similarity[i]["max_similarity"] = max_similarity
+
+    sorted_idx = sorted(similarity, key=lambda k: similarity[k]["max_similarity"], reverse=False)
+    sorted_strings = [string_list[idx] for idx in sorted_idx]
+    return sorted_strings
 
 
 def setup_logging(level="DEBUG", show_module=False):
@@ -159,24 +180,27 @@ def trim_git_diff(diff):
     return "\n".join(trimmed_files)
 
 
-def send_request(diff, category):
-    prompt = textwrap.dedent("""Craft a well-structured and concise commit message that accurately encapsulates the changes described in the given git diff, specifically between lines marked with hashtags. The commit message should employ present tense, omit punctuation at the end, and be easily understood by the team. For changes related to a particular module, file, or library, start the message with its name, followed by a colon and a space (e.g., 'main: add parameters for verbosity'). When revising the prompt, ensure that it:
+def send_request(diff):
+    prompt = textwrap.dedent("""Craft a well-structured and concise commit message that accurately encapsulates the changes described in the given git diff, specifically between lines marked with hashtags. The commit message should employ present tense, omit punctuation at the end, and be easily understood by the team. For changes related to a particular module, file, or library, start the message with its name or identifier, followed by a colon and a space, not including file extensions, if any (e.g., 'main: add parameters for verbosity'). When revising the prompt, ensure that it:
 
-1. Highlights the importance of brevity and clarity in the commit message.
-2. Specifies the use of present tense and the exclusion of punctuation at the end.
-3. Encourages condensing all changes into a single sentence.
-4. Advises to begin with the affected module, file, or library's name if applicable, followed by a colon and a space.
-5. Requests only the commit message in the response, as it will be assessed by an AI model.""") # yapf: disable
+    1. Highlights the importance of brevity and clarity in the commit message.
+    2. Specifies the use of present tense and the exclusion of punctuation at the end.
+    3. Encourages condensing all changes into a single sentence.
+    4. Advises to begin with the affected module, file, or library's name if applicable, not including the file extension, followed by a colon and a space.
+    5. Requests only the commit message in the response, as it will be assessed by an AI model.""")
 
     prompt += f"\n\n###\n{diff}\n###\n"
     logger.debug(f'Prompt is: {prompt}')
-    response = openai.ChatCompletion.create(model="gpt-4",
-                                            n=10,
-                                            top_p=1,
-                                            max_tokens=100,
-                                            messages=[
-                                                {"role": "system", "content": "You are a senior developer specialized in writing git commit messages."},
-                                                {"role": "user", "content": prompt},])
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        n=5,
+        top_p=1,
+        max_tokens=100,
+        messages=[{
+            "role": "system", "content": "You are a senior developer specialized in writing git commit messages."
+        }, {
+            "role": "user", "content": prompt
+        }])
 
     # TODO: automatically split a big diff into several commits,
     # asking the bot to summarize each major change, create a commit message for each,
@@ -194,17 +218,9 @@ if __name__ == "__main__":
     PARSER.add_argument("-d", "--debug", action="store_true", help="Show debug messages")
 
     sub_parsers = PARSER.add_subparsers(dest="command")
-    setup_parser = sub_parsers.add_parser("setup", help="Initial setup of your OpenAI token")
-    pick_parser = sub_parsers.add_parser("pick",
-                                         help="Generates five commit messages for staged changes and lets you choose one")
-
-    pick_parser.add_argument("-c",
-                             "--categories",
-                             default=[],
-                             nargs='?',
-                             help="Ask user to pick a restrictive main category from a list. "
-                                 + "If not specified, the bot will try to guess the main category."
-                                 + "If no list is provided but the flag is specified, cactus will use a default list of categories.") # yapf: disable
+    setup_parser = sub_parsers.add_parser("setup", help="Initial setup of the configuration file")
+    pick_parser = sub_parsers.add_parser(
+        "pick", help="Generates 5 commit messages for staged changes and lets you choose one (default)")
 
     sub_parsers.default = "pick"
     args = PARSER.parse_args()
@@ -224,23 +240,12 @@ if __name__ == "__main__":
         sys.exit(1)
     openai.api_key = openai_token
 
-    category = None
-    if "categories" in args:
-        if args.categories is None:
-            categories = "fix,feat,chore,refactor,style,docs,build,ci,perf".split(",")
-            category, _ = pick.pick(categories, "Pick a category:", indicator='=>', default_index=0)
-        elif len(args.categories) != 0:
-            categories = args.categories.split(",")
-            category, _ = pick.pick(categories, "Pick a category:", indicator='=>', default_index=0)
-        else:
-            categories = []
-
     responses = None
     complexity = 3
     while not responses:
         try:
             diff = get_git_diff(complexity=complexity)
-            responses = send_request(diff, category)
+            responses = send_request(diff)
         except Exception as e:
             if "This model's maximum context length is " in str(e):
                 logger.warning("Too many tokens! Trimming it down...")
