@@ -76,26 +76,6 @@ def generate_prompt_template(prompt_type, template_type):
     return prompt
 
 
-def sort_strings_by_similarity(string_list):
-    similarity = {}
-
-    for i, string1 in enumerate(string_list):
-        max_similarity = 0
-
-        for j, string2 in enumerate(string_list):
-            if i != j:
-                dist = difflib.SequenceMatcher(string1, string2).get_matching_blocks()
-                similarity.setdefault(i, {})[j] = dist
-                if dist > max_similarity:
-                    max_similarity = dist
-
-        similarity[i]["max_similarity"] = max_similarity
-
-    sorted_idx = sorted(similarity, key=lambda k: similarity[k]["max_similarity"], reverse=False)
-    sorted_strings = [string_list[idx] for idx in sorted_idx]
-    return sorted_strings
-
-
 def setup_logging(level="DEBUG", show_module=False):
     """
     Setups better log format for loguru
@@ -135,12 +115,12 @@ def preprocess_diff(diff):
         # Skip file name and index lines
         if line.startswith('---') or line.startswith('+++') or line.startswith('index'):
             continue
-        # elif line.startswith('@@'):
-        #     # Extract line numbers and count from the @@ line
-        #     numbers = re.findall(r'\d+', line)
-        #     if len(numbers) == 4:
-        #         from_line, from_count, to_line, to_count = numbers
-        #         processed_lines.append(f'Changed lines {from_line}-{int(from_line) + int(from_count) - 1} to lines {to_line}-{int(to_line) + int(to_count) - 1}')
+        elif line.startswith('@@'):
+            # Extract line numbers and count from the @@ line
+            numbers = re.findall(r'\d+', line)
+            if len(numbers) == 4:
+                from_line, from_count, to_line, to_count = numbers
+                processed_lines.append(f'Changed lines {from_line}-{int(from_line) + int(from_count) - 1} to lines {to_line}-{int(to_line) + int(to_count) - 1}')
         elif line.startswith('-'):
             processed_lines.append(f'Removed: "{line[1:].strip()}"')
         elif line.startswith('+'):
@@ -152,157 +132,112 @@ def preprocess_diff(diff):
     return joined_lines
 
 
-def get_git_diff(complexity=3):
+def get_git_diff_groups():
     # Check if there are staged changes
-    result = subprocess.run("git diff --cached --quiet --exit-code", shell=True)
-    if result.returncode == 0:
-        # There are not staged changes
-        logger.error("No staged changes found. Please stage changes first or pass --all.")
-        sys.exit(1)
+    # result = subprocess.run("git diff --cached --quiet --exit-code", shell=True)
+    # if result.returncode == 0:
+    #     # There are not staged changes
+    #     logger.error("No staged changes found. Please stage changes first or pass --all.")
+    #     sys.exit(1)
 
-    cmd = "git --no-pager diff --staged --ignore-all-space --ignore-all-space --ignore-blank-lines --ignore-space-change "
+    cmd = "git --no-pager diff --ignore-all-space --ignore-all-space --ignore-blank-lines --ignore-space-change "
     cmd += "--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv "
-    cmd += f"--unified={complexity if complexity > 0 else 0}"
 
+    cmd = "git diff --minimal --unified=1"
+    # cmd += "--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv "
+    # cmd += f"--unified=3"
     result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     if result.returncode != 0:
         logger.error("Failed to get git diff: %s", result.stderr.decode().strip())
         sys.exit(1)
     result = result.stdout.decode().strip()
-    # result = preprocess_diff(result)
-    # logger.info(f"Final word count: {len(result.split())}")
-    # return result
-    lines = result.splitlines()
+    return get_hunks(result)
 
-    diff_files = []
-    file_header = None
-    file_blocks = []
-    block_header = None
-    block_lines = []
+
+def fix_message(message):
+    pattern_type = "^(([a-zA-Z]+)(\(.*?\))?:\s+)"
+    pattern_no_period = "\.$"
+    pattern_first_letter = "^[a-zA-Z]+\([a-zA-Z]+\): ([A-Z])"
+    pattern_numeric_prefix = "^\d+\s*[-.:\)]\s*"
+
+    # Remove numeric prefixes
+    message = re.sub(pattern_numeric_prefix, "", message)
+    message = message.strip(" .,\n")
+
+    # Correct the commit type (lowercase)
+    match = re.search(pattern_type, message)
+    if match:
+        commit_type = match.group(0)
+        message = message[len(commit_type):]
+        message = commit_type.lower() + message[0].lower() + message[1:]
+
+    # Remove periods at the end of the message
+    message = re.sub(pattern_no_period, "", message)
+
+    return message
+
+
+def filter_similar_lines(lines, threshold=0.8):
+    unique_lines = []
 
     for line in lines:
-        if line.startswith("diff --git"):
-            if block_header:
-                file_blocks.append((block_header, block_lines))
-                block_lines = []
-            if file_header:
-                diff_files.append((file_header, file_blocks))
-                file_blocks = []
-                block_lines = []
-            file_header = line
-        elif line.startswith("@@"):
-            if block_header:
-                file_blocks.append((block_header + "\n", block_lines))
-                block_lines = []
-            block_header = line
-        elif line.startswith("---") or line.startswith("+++") or line.startswith("index"):
+        # Check for similarity with all unique_lines using fuzz.partial_token_sort_ratio
+        similar_lines = [
+            unique_line for unique_line in unique_lines if fuzz.partial_token_sort_ratio(line, unique_line) >= threshold * 100
+        ]
+
+        # If we find any similar lines, continue to the next line
+        if similar_lines:
             continue
-        else:
-            block_lines.append(line)
 
-    # Append the last block and file
-    file_blocks.append((block_header, block_lines))
-    diff_files.append((file_header, file_blocks))
+        # Otherwise, add the line to unique_lines
+        unique_lines.append(line)
 
-    final_diff = []
-    for file_header, blocks in diff_files:
-        final_diff.append(file_header)
-        for block_header, block_lines in blocks:
-            final_diff.append(block_header)
-            for line in block_lines:
-                final_diff.append(line)
-
-    final_diff = "\n".join(final_diff)
-    if complexity < 0:
-        # FIXME: implement better trimming on the population side
-        for _ in range(abs(complexity)):
-            final_diff = trim_git_diff(final_diff)
-
-    # TODO: count tokens instead of words
-    # SEE: https://platform.openai.com/tokenizer?view=bpe
-    if len(final_diff.split()) < 8:
-        logger.error("Diff is too small! Check the output of `git diff --staged`.")
-        sys.exit(1)
-    elif len(final_diff.split()) > 3000:
-        raise Exception("Diff is too large.")
-    else:
-        logger.debug(f"Git diff: {result}")
-        logger.success(f"Diff has {len(final_diff.split())} words.")
-
-    return final_diff
-
-
-def trim_git_diff(diff):
-    lines = diff.splitlines()
-    files = []
-    file_ = []
-    for line in lines:
-        if line.startswith(">"):
-            if file_:
-                files.append(file_)
-                file_ = []
-            file_.append(line)
-        else:
-            file_.append(line)
-    files.append(file_)
-
-    trimmed_files = []
-    for file_ in files:
-        chunks = []
-        chunk = []
-        for line in file_:
-            if line == "@@":
-                if chunk:
-                    chunks.append(chunk)
-                    chunk = []
-                chunk.append(line)
-            else:
-                chunk.append(line)
-        chunks.append(chunk)
-
-        chunks = sorted(chunks, key=len)
-        if len(chunks) > 2:
-            chunks = chunks[2:]
-        trimmed_file = "\n".join(["\n".join(chunk) for chunk in chunks])
-        trimmed_files.append(trimmed_file)
-    return "\n".join(trimmed_files)
+    logger.debug(f"Removed {len(lines) - len(unique_lines)} similar lines")
+    return unique_lines
 
 
 def send_request(diff):
-    for n, temp in [(1, t) for t in [0.0, 0.25, 0.5]] + [(2, t) for t in [0.75, 1.0, 1.25]]:
-        if temp <= 0.5:
-            prompt = generate_prompt_template("multiple", "convcommits")
-        else:
-            prompt = generate_prompt_template("single", "convcommits")
+    messages = []
+    pattern = re.compile(r"^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9_-]+\))?: [a-z].*$",
+                         re.IGNORECASE)
+    for ammount, temp, model, single_or_multiple in [(2, 0.3, "gpt-3.5-turbo", "single"), (5, 1, "gpt-3.5-turbo", "multiple"), (2, 0.95, "gpt-4", "single")]:
+        prompt = generate_prompt_template(single_or_multiple, "convcommits")
 
-        # result = subprocess.run(
-        #     "git log -n 5 --pretty=format:'%s'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        # last_commits = result.stdout.decode().strip()
-        # prompt += f"\n\n-----\n{last_commits}"
-        prompt += f"\n\n#####\n{diff}\n#####"
+        logger.trace(f'Template is: {prompt}')
+        prompt += f"\n#####\n{diff}\n#####"
         logger.trace(f'Prompt is: {prompt}')
 
         response = openai.ChatCompletion.create(
-            # model="gpt-4",
-            model="gpt-3.5-turbo",
-            n=n,
+            model=model,
+            n=ammount,
             top_p=1,
             temperature=temp,
-            stop=["\n"] if temp > 0.5 else None,
-            max_tokens=100,
+            stop=None if single_or_multiple == "multiple" else ["\n"],
+            max_tokens=50,
             messages=[{
                 "role": "system",
-                "content": "You are a helpful assistant specialized in writing git commit messages.",
+                "content": "You are a senior developer with over 30 years of experience dedicated in writing git commit messages following the Conventional Commits guideline.",
             }, {
                 "role": "user",
                 "content": prompt,
             }])
+
+        # Fix some common issues
         for choice in response.choices:
-            logger.debug(f"temp: {temp}, response: {choice.message.content.splitlines()}")
-            for line in choice.message.content.splitlines():
-                if not line:
-                    continue
-                yield line.strip(" .,\n")
+            content = choice.message.content
+            logger.trace(f"am: {ammount}, temp: {temp}, model: {model}, single_or_multiple: {single_or_multiple}, content: {content.splitlines()}")
+            for _message in content.splitlines():
+                messages.append(_message)
+
+    # Filter out similar commit messages
+    fixed_messages = []
+    for message in messages:
+        if not pattern.match(message):
+            continue
+        fixed_messages.append(fix_message(message))
+    unique_messages = filter_similar_lines(fixed_messages, 0.9)
+    return unique_messages
 
 
 if __name__ == "__main__":
