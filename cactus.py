@@ -28,10 +28,10 @@ PROMPT_PREFIX_MULTIPLE = "Craft distinct and concise commit messages that provid
 
 PROMPT_TEMPLATE_FILENAMES = "For changes related to a particular module, file, or library, start the message with its name or identifier, followed by a colon and a space, not including file extensions, if any (e.g., 'main: add parameters for verbosity')."
 PROMPT_TEMPLATE_GITLOG = "To maintain consistency within the repository, review the list of the latest commits found before the diff but after the line with five dashes ('-----') and use the same commit message style as the convention for messages you generate. This ensures generated commit messages adhere to the repository's preferred style. "
-PROMPT_TEMPLATE_CONVCOMMITS = "Commits MUST be prefixed with a type from the Conventional Commits styleguide, followed by a colon and a space. An optional scope MAY be provided after a type, describing a section of the codebase enclosed in parent­hesis, e.g., 'fix(parser): '. "
+PROMPT_TEMPLATE_CONVCOMMITS = "Commits MUST be prefixed with a suiting type from the Conventional Commits styleguide, followed by a colon and a space. An optional scope MAY be provided after a type, describing a section of the codebase, enclosed in parent­hesis, e.g., 'fix(parser): '. "
 
-PROMPT_SUFFIX_SINGLE = "Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Upon revising the prompt, confirm that it:\n"
-PROMPT_SUFFIX_MULTIPLE = "Create multiple diverse alternative commit messages in order to account for potential misunderstandings, one per line, in no particular order. If the token limit is reached, delete the last commit message. Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Upon revising the prompt confirm that it:\n"
+PROMPT_SUFFIX_SINGLE = "Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Upon revising the message, confirm that it:\n"
+PROMPT_SUFFIX_MULTIPLE = "Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Create multiple diverse alternatives to account for potential misunderstandings and shuffle the messages order. Upon revising each message, confirm that it:\n"
 
 PROMPT_CHECKLIST_PREFIX = """
     1. Highlights the significance of brevity and precision within commit messages.
