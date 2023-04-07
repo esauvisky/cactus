@@ -27,8 +27,8 @@ PROMPT_TEMPLATE_FILENAMES = "For changes related to a particular module, file, o
 PROMPT_TEMPLATE_GITLOG = "To maintain consistency within the repository, review the list of the latest commits found before the diff but after the line with five dashes ('-----') and use the same commit message style as the convention for messages you generate. This ensures generated commit messages adhere to the repository's preferred style. "
 PROMPT_TEMPLATE_CONVCOMMITS = "Commits MUST be prefixed with a type from the Conventional Commits styleguide, followed by a colon and a space. An optional scope MAY be provided after a type, describing a section of the codebase enclosed in parent­hesis, e.g., 'fix(parser): '. "
 
-PROMPT_SUFFIX_SINGLE = "Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Upon revising the message, confirm that it:\n"
-PROMPT_SUFFIX_MULTIPLE = "Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Create multiple diverse alternatives to account for potential misunderstandings and shuffle the messages order. Upon revising each message, confirm that it:\n"
+PROMPT_SUFFIX_SINGLE = "Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Upon revising the prompt, confirm that it:\n"
+PROMPT_SUFFIX_MULTIPLE = "Create multiple diverse alternative commit messages in order to account for potential misunderstandings, one per line, in no particular order. If the token limit is reached, delete the last commit message. Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Upon revising the prompt confirm that it:\n"
 
 PROMPT_CHECKLIST_PREFIX = """
     1. Highlights the significance of brevity and precision within commit messages.
@@ -41,10 +41,10 @@ PROMPT_CHECKIST_GITLOG = """
 PROMPT_CHECKLIST_CONVCOMMITS = """
     4. Underscores adherence to the Conventional Commits styleguide."""
 PROMPT_CHECKLIST_SUFFIX_SINGLE = """
-    5. Requests only the commit message in the response, in a single line, as it will be assessed by an AI model."""
+    5. Requests only the commit message in the response, one per line, without detailed descriptions, as it will be assessed by an AI model."""
 PROMPT_CHECKLIST_SUFFIX_MULTIPLE = """
-    5. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
-    6. Requests only the commit messages in the response, one per line, as they will be assessed by an AI model."""
+    5. Encourages the generation of diverse alternatives to account for potential misunderstandings.
+    6. Requests only the commit messages in the response, one per line, without detailed descriptions, as they will be assessed by an AI model."""
 
 def generate_prompt_template(prompt_type, template_type):
     prompt = PROMPT_PREFIX_SINGLE if prompt_type == "single" else PROMPT_PREFIX_MULTIPLE
@@ -131,12 +131,12 @@ def preprocess_diff(diff):
         # Skip file name and index lines
         if line.startswith('---') or line.startswith('+++') or line.startswith('index'):
             continue
-        elif line.startswith('@@'):
-            # Extract line numbers and count from the @@ line
-            numbers = re.findall(r'\d+', line)
-            if len(numbers) == 4:
-                from_line, from_count, to_line, to_count = numbers
-                processed_lines.append(f'Changed lines {from_line}-{int(from_line) + int(from_count) - 1} to lines {to_line}-{int(to_line) + int(to_count) - 1}')
+        # elif line.startswith('@@'):
+        #     # Extract line numbers and count from the @@ line
+        #     numbers = re.findall(r'\d+', line)
+        #     if len(numbers) == 4:
+        #         from_line, from_count, to_line, to_count = numbers
+        #         processed_lines.append(f'Changed lines {from_line}-{int(from_line) + int(from_count) - 1} to lines {to_line}-{int(to_line) + int(to_count) - 1}')
         elif line.startswith('-'):
             processed_lines.append(f'Removed: "{line[1:].strip()}"')
         elif line.startswith('+'):
@@ -165,6 +165,9 @@ def get_git_diff(complexity=3):
         logger.error("Failed to get git diff: %s", result.stderr.decode().strip())
         sys.exit(1)
     result = result.stdout.decode().strip()
+    # result = preprocess_diff(result)
+    # logger.info(f"Final word count: {len(result.split())}")
+    # return result
     lines = result.splitlines()
 
     diff_files = []
@@ -219,6 +222,7 @@ def get_git_diff(complexity=3):
     elif len(final_diff.split()) > 3000:
         raise Exception("Diff is too large.")
     else:
+        logger.debug(f"Git diff: {result}")
         logger.success(f"Diff has {len(final_diff.split())} words.")
 
     return final_diff
@@ -262,17 +266,17 @@ def trim_git_diff(diff):
 
 def send_request(diff):
     for n, temp in [(1, t) for t in [0.0, 0.25, 0.5]] + [(2, t) for t in [0.75, 1.0, 1.25]]:
-        if temp > 0.5:
+        if temp <= 0.5:
             prompt = generate_prompt_template("multiple", "convcommits")
         else:
             prompt = generate_prompt_template("single", "convcommits")
 
-        logger.trace(f'Template is: {prompt}')
-        result = subprocess.run(
-            "git log -n 5 --pretty=format:'%s'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        last_commits = result.stdout.decode().strip()
-        prompt += f"\n\n-----\n{last_commits}"
+        # result = subprocess.run(
+        #     "git log -n 5 --pretty=format:'%s'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        # last_commits = result.stdout.decode().strip()
+        # prompt += f"\n\n-----\n{last_commits}"
         prompt += f"\n\n#####\n{diff}\n#####"
+        logger.trace(f'Prompt is: {prompt}')
 
         response = openai.ChatCompletion.create(
             # model="gpt-4",
@@ -280,8 +284,8 @@ def send_request(diff):
             n=n,
             top_p=1,
             temperature=temp,
-            stop=["\n"],
-            max_tokens=50,
+            stop=["\n"] if temp > 0.5 else None,
+            max_tokens=100,
             messages=[{
                 "role": "system",
                 "content": "You are a helpful assistant specialized in writing git commit messages.",
@@ -347,7 +351,7 @@ if __name__ == "__main__":
     logger.debug(f'Assistant raw answer:\n{responses}')
     clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
     commit_messages = [choice for choice in clean_responses]
-    message, _ = pick.pick(commit_messages, "Pick a suggestion:", indicator='=>', default_index=0)
+    message, _ = pick.pick(commit_messages, f"Took {time_taken} seconds to generate these commit messages:")
 
     # Make the commit with the chosen commit message
     subprocess.run(f"git commit -m '{message}'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
