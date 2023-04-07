@@ -272,25 +272,40 @@ if __name__ == "__main__":
     openai.api_key = openai_token
 
     responses = None
-    complexity = 3
-    while not responses:
-        try:
-            diff = get_git_diff(complexity=complexity)
-            responses = send_request(diff)
-        except Exception as e:
-            if "This model's maximum context length is " in str(e):
-                logger.warning("Too many tokens! Trimming it down...")
-                complexity -= 2
-            elif "Diff is too large" in str(e):
-                logger.warning("Diff too large! Trimming it down...")
-                complexity -= 1
-            else:
-                raise e
 
-    logger.debug(f'Assistant raw answer:\n{responses}')
-    clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
-    commit_messages = [choice for choice in clean_responses]
-    message, _ = pick.pick(commit_messages, f"Took {time_taken} seconds to generate these commit messages:")
+    groups = get_git_diff_groups()
+    patches = []
+    logger.info(f"Found {len(groups)} groups of changes from {len(groups.values())} hunks")
+    for n, hunks in enumerate(groups.values(), 1):
+        logger.info(f"Generating commit message for group {n}...")
+        diff = "\n".join([str(hunk[1]) for hunk in hunks])
+        responses = send_request(diff)
+        clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
+        commit_messages = [choice for choice in clean_responses]
+        logger.debug(f"Commit messages: {commit_messages}")
+        patches.append((hunks, commit_messages))
 
-    # Make the commit with the chosen commit message
-    subprocess.run(f"git commit -m '{message}'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    logger.success(f"Generated {len(patches)} commits from {len(groups)} groups ({', '.join([str(len(g)) for g in groups.values()])})")
+
+    input("Press enter to continue...")
+    # subprocess.run(f"git restore --staged .", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    for hunks, commit_messages in patches:
+        diff = "\n".join([str(hunk[1]) for hunk in hunks])
+        # pydoc.pipepager(diff, cmd='less -R')
+        console = Console()
+        with console.pager(styles=True):
+            console.print(diff)
+        message, _ = pick.pick(commit_messages, "Pick a suggestion:", indicator='=>', default_index=0)
+        # subprocess.run(f"less {patch_path}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+        # Make the commit with the chosen commit message
+        stage_hunks(hunks)
+        # for patch_path in patches_path:
+        #     subprocess.run(
+        #         f"git apply --cached {patch_path}",
+        #         shell=True,
+        #         stdout=subprocess.PIPE,
+        #         stderr=subprocess.PIPE,
+        #         check=True)
+        subprocess.run(
+            f"git commit -m '{message}'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
