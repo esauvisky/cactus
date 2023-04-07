@@ -7,18 +7,19 @@ __version__ = "1.1.0"
 __license__ = "MIT"
 
 import argparse
-import difflib
 import os
+import pydoc
 import re
 import subprocess
 import sys
-import textwrap
+from tempfile import TemporaryFile, mkstemp
+from pathlib import Path
 
 import openai
 import pick
 from loguru import logger
 
-
+from grouper import create_patch, get_hunks
 
 PROMPT_PREFIX_SINGLE = "Craft a well-structured and concise commit message that accurately encapsulates the changes described in the given git diff, specifically between lines marked with hashtags. The commit message should employ present tense, without punctuation at the end, and be easily comprehensible by the team. "
 PROMPT_PREFIX_MULTIPLE = "Craft distinct and concise commit messages that provide an accurate summary of the changes found in the following git diff, specifically targeting the lines marked with hashtags. Each message MUST be in present tense, without punctuation at the end, and be easily comprehensible by the team. "
