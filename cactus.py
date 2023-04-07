@@ -42,12 +42,13 @@ PROMPT_CHECKLIST_FILENAMES = """
 PROMPT_CHECKIST_GITLOG = """
     4. Underscores consistency with the repository's commit message conventions."""
 PROMPT_CHECKLIST_CONVCOMMITS = """
-    4. Underscores adherence to the Conventional Commits styleguide."""
+    4. Underscores adherence to the Conventional Commits guideline."""
 PROMPT_CHECKLIST_SUFFIX_SINGLE = """
-    5. Requests only the commit message in the response, one per line, without detailed descriptions, as it will be assessed by an AI model."""
+    5. Requests only the commit message in the response, in a single line, as it will be assessed by an AI model."""
 PROMPT_CHECKLIST_SUFFIX_MULTIPLE = """
-    5. Encourages the generation of diverse alternatives to account for potential misunderstandings.
-    6. Requests only the commit messages in the response, one per line, without detailed descriptions, as they will be assessed by an AI model."""
+    5. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
+    6. Requests only the commit messages in the response, one per line, as they will be assessed by an AI model."""
+
 
 def generate_prompt_template(prompt_type, template_type):
     prompt = PROMPT_PREFIX_SINGLE if prompt_type == "single" else PROMPT_PREFIX_MULTIPLE
