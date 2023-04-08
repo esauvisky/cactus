@@ -301,8 +301,9 @@ if __name__ == "__main__":
     responses = None
 
     groups = get_git_diff_groups()
+
     patches = []
-    logger.info(f"Found {len(groups)} groups of changes from {len(groups.values())} hunks")
+    logger.info(f"Separated into {len(groups)} groups of changes from {sum([len(g) for g in groups.values()])} hunks")
     for n, hunks in enumerate(groups.values(), 1):
         logger.info(f"Generating commit message for group {n}...")
         diff = "\n".join([str(hunk[1]) for hunk in hunks])
@@ -314,7 +315,6 @@ if __name__ == "__main__":
 
     logger.success(f"Generated {len(patches)} commits from {len(groups)} groups ({', '.join([str(len(g)) for g in groups.values()])})")
 
-    input("Press enter to continue...")
     # subprocess.run(f"git restore --staged .", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     for hunks, commit_messages in patches:
         diff = "\n".join([str(hunk[1]) for hunk in hunks])
@@ -326,7 +326,7 @@ if __name__ == "__main__":
         # subprocess.run(f"less {patch_path}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
         # Make the commit with the chosen commit message
-        stage_hunks(hunks)
+        stage_changes(hunks)
         # for patch_path in patches_path:
         #     subprocess.run(
         #         f"git apply --cached {patch_path}",
