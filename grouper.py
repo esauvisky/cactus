@@ -49,11 +49,27 @@ def get_hunks(git_diff):
         hunks = [(patched_file, hunk) for patched_file in patch_set for hunk in patched_file]
         embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder/4")
         embeddings = embed_hunks(embed, hunks)
+
+
+        # dbscan = DBSCAN(n_jobs=-1).fit(embeddings)
+        # cluster_labels = dbscan.labels_
+
+        # kmeans = KMeans(n_clusters=3).fit(embeddings)
+        # cluster_labels = kmeans.labels_
+
         clusters = cluster_embeddings(embeddings)
         grouped_hunks = group_hunks_by_cluster(hunks, clusters)
-    except UnidiffParseError as e:
-        patch_set = PatchSet([PatchedFile(git_diff)])
-        if len(patch_set) == 1 and len(patch_set[0]) == 1:
+
+        # # Map the cluster labels back to the original Git diff hunks
+        # diff_hunk_groups = {}
+        # for i, label in enumerate(cluster_labels):
+        #     if label not in diff_hunk_groups:
+        #         diff_hunk_groups[label] = []
+        #     diff_hunk_groups[label].append(hunks[i])
+        # grouped_hunks = diff_hunk_groups
+    except UnidiffParseError:
+        patch_set = PatchSet([git_diff])
+        if len(patch_set) == 1:
             # Only one hunk in the git_diff
             hunks = [(patch_set[0], patch_set[0][0])]
             grouped_hunks = {1: hunks}
