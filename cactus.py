@@ -197,12 +197,35 @@ def filter_similar_lines(lines, threshold=0.8):
     logger.debug(f"Removed {len(lines) - len(unique_lines)} similar lines")
     return unique_lines
 
+def generate_final_message(messages):
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        n=1,
+        top_p=1,
+        temperature=0.2,
+        stop=["\n"],
+        max_tokens=50,
+        messages=[{
+            "role": "system",
+            "content": generate_prompt_template("single", "convcommits")
+        }, {
+            "role": "user",
+            "content": "Combine the suggestions provided below to create a single, concise commit message without special characters or emojis. " +
+            "Feel free to use, modify, or enhance these suggestions as necessary, while maintaining the essence of the original ideas. " +
+            "Ensure that the final commit message is in a single line and effectively communicates the purpose of the commit." +
+            "\n".join(messages)
+        }])
+    message = response.choices[0].message.content
+    message = fix_message(message)
+    return message
+
 
 def send_request(diff):
     messages = []
     pattern = re.compile(r"^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9_-]+\))?: [a-z].*$",
                          re.IGNORECASE)
-    for ammount, temp, model, single_or_multiple in [(2, 0.3, "gpt-3.5-turbo", "single"), (5, 1, "gpt-3.5-turbo", "multiple"), (2, 0.95, "gpt-4", "single")]:
+    # for ammount, temp, model, single_or_multiple in [(3, 0.6, "gpt-3.5-turbo", "single"), (2, 1.1, "gpt-3.5-turbo", "multiple")]: #(1, 0.95, "gpt-4", "multiple")]:
+    for ammount, temp, model, single_or_multiple in [(5, 1, "gpt-4", "single")]:
         prompt = generate_prompt_template(single_or_multiple, "convcommits")
 
         logger.trace(f'Template is: {prompt}')
