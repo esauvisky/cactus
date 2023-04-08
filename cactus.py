@@ -141,10 +141,10 @@ def get_git_diff_groups():
     #     logger.error("No staged changes found. Please stage changes first or pass --all.")
     #     sys.exit(1)
 
-    cmd = "git --no-pager diff --ignore-all-space --ignore-all-space --ignore-blank-lines --ignore-space-change "
-    cmd += "--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv "
+    # cmd = "git --no-pager diff --ignore-all-space --ignore-all-space --ignore-blank-lines --ignore-space-change "
+    # cmd += "--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --unified=0"
 
-    cmd = "git diff --minimal --unified=1"
+    cmd = "git diff --inter-hunk-context=0 --minimal -p -U3"
     # cmd += "--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv "
     # cmd += f"--unified=3"
     result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
