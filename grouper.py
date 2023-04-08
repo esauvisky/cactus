@@ -1,18 +1,18 @@
 import subprocess
-from tempfile import mktemp
+import os
+import shlex
 import numpy as np
-from regex import P
 from unidiff import PatchSet, PatchedFile, UnidiffParseError, Hunk
 import tensorflow_hub as hub
 from scipy.cluster import hierarchy
-
+from sklearn.cluster import KMeans, DBSCAN
 
 def embed_hunks(embed, hunks):
     hunk_texts = [str(hunk) for hunk in hunks]
     return embed(hunk_texts).numpy()
 
 
-def cluster_embeddings(embeddings: np.ndarray, threshold: float = 0.3):
+def cluster_embeddings(embeddings: np.ndarray, threshold: float = 0.7):
     distance_matrix = 1 - np.inner(embeddings, embeddings)
     linkage = hierarchy.linkage(distance_matrix, 'complete')
     clusters = hierarchy.fcluster(linkage, 1 - threshold, 'distance')
