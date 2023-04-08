@@ -1,6 +1,6 @@
 # Cactus Automates Commits Through Uncomplicated Suggestions
 
-![Cactus Demo](./.video.gif)
+![Cactus Demo](./.video.mp4)
 
 ## About
 
