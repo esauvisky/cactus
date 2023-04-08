@@ -238,7 +238,7 @@ def send_request(diff):
             top_p=1,
             temperature=temp,
             stop=None if single_or_multiple == "multiple" else ["\n"],
-            max_tokens=50,
+            max_tokens=30,
             messages=[{
                 "role": "system",
                 "content": "You are a senior developer with over 30 years of experience dedicated in writing git commit messages following the Conventional Commits guideline.",
@@ -251,7 +251,10 @@ def send_request(diff):
         for choice in response.choices:
             content = choice.message.content
             logger.trace(f"am: {ammount}, temp: {temp}, model: {model}, single_or_multiple: {single_or_multiple}, content: {content.splitlines()}")
-            for _message in content.splitlines():
+            lines = content.splitlines()
+            if single_or_multiple == "multiple":
+                lines = content.splitlines()[:-1]
+            for _message in lines:
                 messages.append(_message)
 
     # Filter out similar commit messages
@@ -260,7 +263,7 @@ def send_request(diff):
         if not pattern.match(message):
             continue
         fixed_messages.append(fix_message(message))
-    unique_messages = filter_similar_lines(fixed_messages, 0.9)
+    unique_messages = [generate_final_message(fixed_messages), *filter_similar_lines(fixed_messages, SIMILARITY_THRESHOLD)]
     return unique_messages
 
 
