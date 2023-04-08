@@ -88,20 +88,22 @@ def stage_hunks(hunks):
             f.write(str(hunk))
             f.write("\n")
         subprocess.run(["git", "apply", "--cached", "temp.diff"])
-    # os.remove("temp.diff")
+    os.remove("temp.diff")
 
 
-# def stage_changes(filename, hunks):
-#     with open('.tmp_patch', 'w') as patch_file:
-#         for hunk_info in hunks:
-#             patch_file, hunk = hunk_info
-#             patch_file.write(f"--- {patch_file.source_file}\n")
-#             patch_file.write(f"+++ {patch_file.target_file}\n")
-#             patch_file.write(str(hunk))
+def stage_changes(hunks):
+    with open('.tmp_patch', 'w') as fd:
+        fd.write("".join(hunks[0][0].patch_info))
+        for hunk_info in hunks:
+            patched_file, hunk = hunk_info
+            fd.write(f"--- {patched_file.source_file}\n")
+            fd.write(f"+++ {patched_file.target_file}\n")
+            fd.write(str(hunk))
+            fd.write("\n")
 
-#     subprocess.run(shlex.split('git apply --cached .tmp_patch'), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-#     subprocess.run(shlex.split('rm .tmp_patch'))
-#     print(f'Staged patch:\n{patch}')
+    subprocess.run('git apply --cached .tmp_patch', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    os.remove('.tmp_patch')
+    # print(f'Staged patch:\n{patch}')
 
 # def extract_hunks(git_diff):
 #     hunks = []
