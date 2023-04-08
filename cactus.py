@@ -10,7 +10,6 @@ import argparse
 import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import pydoc
 import re
 import subprocess
 import sys
