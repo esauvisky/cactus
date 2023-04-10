@@ -114,26 +114,37 @@ def preprocess_diff(diff):
     return joined_lines
 
 
-def get_git_diff_groups():
+def run(cmd):
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    result.stdout = result.stdout.decode("utf-8").strip()
+    result.stderr = result.stderr.decode("utf-8").strip()
+    return result
+
+def get_git_diff(context_size):
     # Check if there are staged changes
-    # result = subprocess.run("git diff --cached --quiet --exit-code", shell=True)
-    # if result.returncode == 0:
-    #     # There are not staged changes
-    #     logger.error("No staged changes found. Please stage changes first or pass --all.")
-    #     sys.exit(1)
+    result = run("git diff --cached --quiet --exit-code")
+    if result.returncode == 0:
+        # There are not staged changes
+        logger.error("No staged changes found, please stage the desired changes.")
+        sys.exit(1)
 
-    # cmd = "git --no-pager diff --ignore-all-space --ignore-all-space --ignore-blank-lines --ignore-space-change "
-    # cmd += "--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --unified=0"
+    # cmd = f"git --no-pager diff --staged --ignore-all-space --ignore-all-space --ignore-blank-lines --ignore-space-change --inter-hunk-context={context_size} "
+    # cmd += f"--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --unified={context_size}"
 
-    cmd = "git diff --inter-hunk-context=0 --minimal -p -U3"
     # cmd += "--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv "
+    cmd = f"git diff --inter-hunk-context={context_size} -U{context_size} --minimal -p --staged"
     # cmd += f"--unified=3"
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    result = run(cmd)
     if result.returncode != 0:
         logger.error("Failed to get git diff: %s", result.stderr.decode().strip())
         sys.exit(1)
-    result = result.stdout.decode().strip()
-    return get_hunks(result)
+    result = result.stdout
+    return result
 
 
 def fix_message(message):
