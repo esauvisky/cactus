@@ -26,7 +26,7 @@ def jaccard_similarity(str1, str2):
     return len(intersection) / len(union)
 
 
-def similarity_matrix(hunks, type='tfidf'):
+def similarity_matrix(hunks, type='fuzzy'):
     if type == 'tfidf':
         # Compute the TF-IDF matrix for the hunks
         vectorizer = TfidfVectorizer()
@@ -53,7 +53,7 @@ def similarity_matrix(hunks, type='tfidf'):
                     if type == 'jaccard':
                         sim_score = jaccard_similarity(hunks[i], hunks[j])
                     elif type == 'fuzzy':
-                        sim_score = fuzz.ratio(hunks[i], hunks[j])
+                        sim_score = fuzz.token_set_ratio(hunks[i], hunks[j]) / 100
                     matrix[i][j] = sim_score
                     matrix[j][i] = sim_score
     return matrix
