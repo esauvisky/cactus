@@ -60,7 +60,15 @@ def similarity_matrix(hunks, type='tfidf'):
 
 
 def get_modified_lines(hunk):
-    return '\n'.join(re.sub(r"([+-]) ?", "", re.sub(r" +", " ", line)) for line in hunk.splitlines() if line.startswith('+') or line.startswith('-'))
+    filtered_lines = []
+    for line in hunk.splitlines():
+        if line.startswith('+') or line.startswith('-'):
+            line = re.sub(r" +", " ", line)
+            line = re.sub(r"([+-]) ?", "", line)
+            # replaces all special characters with space
+            line = re.sub(r"[^a-zA-Z0-9\s]", " ", line)
+            filtered_lines.append(line)
+    return '\n'.join(filtered_lines)
 
 
 def group_hunks(git_diff, n_clusters, affinity_threshold):

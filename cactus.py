@@ -285,7 +285,7 @@ if __name__ == "__main__":
     patches = []
     logger.info(f"Separated into {len(groups)} groups of changes from {sum([len(g) for g in groups.values()])} hunks")
     for n, hunks in enumerate(groups.values(), 1):
-        diff = "\n".join([get_modified_lines(hunk[1]) for hunk in hunks])
+        diff = "\n".join([hunk[1] for hunk in hunks])
         responses = send_request(diff)
         clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
         commit_messages = [choice for choice in clean_responses]
