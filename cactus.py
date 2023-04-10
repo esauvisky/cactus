@@ -191,32 +191,31 @@ def send_request(diff):
     pattern = re.compile(r"^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9_-]+\))?: [a-z].*$",
                          re.IGNORECASE)
     # for ammount, temp, model, single_or_multiple in [(3, 0.6, "gpt-3.5-turbo", "single"), (2, 1.1, "gpt-3.5-turbo", "multiple")]: #(1, 0.95, "gpt-4", "multiple")]:
-    for ammount, temp, model, single_or_multiple in [(5, 1, "gpt-4", "single")]:
-        prompt = generate_prompt_template(single_or_multiple, "convcommits")
-
-        logger.trace(f'Template is: {prompt}')
-        prompt += f"\n#####\n{diff}\n#####"
-        logger.trace(f'Prompt is: {prompt}')
-
+    for ammount, temp, model, single_or_multiple in [(5, 0.3, "gpt-3.5-turbo", "single")]:
         response = openai.ChatCompletion.create(
             model=model,
             n=ammount,
             top_p=1,
             temperature=temp,
             stop=None if single_or_multiple == "multiple" else ["\n"],
-            max_tokens=30,
-            messages=[{
-                "role": "system",
-                "content": "You are a senior developer with over 30 years of experience dedicated in writing git commit messages following the Conventional Commits guideline.",
-            }, {
-                "role": "user",
-                "content": prompt,
-            }])
+            max_tokens=100,
+            messages=[
+                {
+                    "role": "system",
+                    "content": PROMPT_SINGLE_SYSTEM if single_or_multiple == "single" else PROMPT_MULTIPLE_SYSTEM
+                },
+                {
+                    "role": "user",
+                    "content": PROMPT_SINGLE_START + diff + PROMPT_SINGLE_END
+                               if single_or_multiple == "single" else PROMPT_MULTIPLE_START + diff + PROMPT_MULTIPLE_END
+                },
+            ],
+        )
 
         # Fix some common issues
         for choice in response.choices:
             content = choice.message.content
-            logger.trace(f"am: {ammount}, temp: {temp}, model: {model}, single_or_multiple: {single_or_multiple}, content: {content.splitlines()}")
+            logger.debug(f"am: {ammount}, temp: {temp}, model: {model}, single_or_multiple: {single_or_multiple}, content: {content.splitlines()}")
             lines = content.splitlines()
             if single_or_multiple == "multiple":
                 lines = content.splitlines()[:-1]
