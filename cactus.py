@@ -19,63 +19,43 @@ import openai
 import pick
 from loguru import logger
 from rich.console import Console
-from fuzzywuzzy import fuzz
+from thefuzz import fuzz
 
-from grouper import get_hunks, stage_changes
+from grouper import get_modified_lines, group_hunks, stage_changes
 
-SIMILARITY_THRESHOLD = 0.45
+SIMILARITY_THRESHOLD = 70
 
-PROMPT_PREFIX_SINGLE = "Craft a well-structured and concise commit message that accurately encapsulates the changes described in the given git diff, specifically between lines marked with hashtags. The commit message should employ present tense, without punctuation at the end, and be easily comprehensible by the team. "
-PROMPT_PREFIX_MULTIPLE = "Craft distinct and concise commit messages that provide an accurate summary of the changes found in the following git diff, specifically targeting the lines marked with hashtags. Each message MUST be in present tense, without punctuation at the end, and be easily comprehensible by the team. "
+PROMPT_MULTIPLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a list of 5 distinct commit messages that summarize all the changes made in a single message. I will use the Conventional Commits guidelines as a reference, but prioritize creating messages that encompass all changes. The generated commit messages will be ordered from best to worst."""
+PROMPT_MULTIPLE_START = """Analyze the following diff and generate a list of 5 commit messages, each summarizing all the changes made. Use the Conventional Commits guidelines as a reference but prioritize encompassing all changes in one message. Provide the commit messages as a descending-ordered list from best to worst, and nothing else.
 
-PROMPT_TEMPLATE_FILENAMES = "For changes related to a particular module, file, or library, start the message with its name or identifier, followed by a colon and a space, not including file extensions, if any (e.g., 'main: add parameters for verbosity')."
-PROMPT_TEMPLATE_GITLOG = "To maintain consistency within the repository, review the list of the latest commits found before the diff but after the line with five dashes ('-----') and use the same commit message style as the convention for messages you generate. This ensures generated commit messages adhere to the repository's preferred style. "
-PROMPT_TEMPLATE_CONVCOMMITS = "Commits MUST be prefixed with a suiting type from the Conventional Commits styleguide, followed by a colon and a space. An optional scope MAY be provided after a type, describing a section of the codebase, enclosed in parent­hesis, e.g., 'fix(parser): '. "
+Conventional Commits guidelines:
+1. Commit messages should start with a type (e.g., feat, fix, chore, docs).
+2. Optionally, include a scope in parentheses after the type, describing the area of the code affected.
+3. The commit message subject must be separated from the type (and scope, if included) by a colon and a space.
+4. The subject should be a concise description of the changes.
 
-PROMPT_SUFFIX_SINGLE = "Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Upon revising the message, confirm that it:\n"
-PROMPT_SUFFIX_MULTIPLE = "Be aware that the diff contains contextual output to assist in comprehending the alterations, and only lines commencing with '-' or '+' signify the actual modifications. Create multiple diverse alternatives to account for potential misunderstandings and shuffle the messages order. Upon revising each message, confirm that it:\n"
+--- Begin diff ---
+"""
 
-PROMPT_CHECKLIST_PREFIX = """
-    1. Highlights the significance of brevity and precision within commit messages.
-    2. Dictates the use of present tense and the absence of punctuation at the end.
-    3. Describe all alterations within a single sentence."""
-PROMPT_CHECKLIST_FILENAMES = """
-    4. Indicates starting commit messages with the module, file, or library's name or identifier for related changes."""
-PROMPT_CHECKIST_GITLOG = """
-    4. Underscores consistency with the repository's commit message conventions."""
-PROMPT_CHECKLIST_CONVCOMMITS = """
-    4. Underscores adherence to the Conventional Commits guideline."""
-PROMPT_CHECKLIST_SUFFIX_SINGLE = """
-    5. Requests only the commit message in the response, in a single line, as it will be assessed by an AI model."""
-PROMPT_CHECKLIST_SUFFIX_MULTIPLE = """
-    5. Encourages the generation of diverse alternatives for each message to account for potential misunderstandings.
-    6. Requests only the commit messages in the response, one per line, as they will be assessed by an AI model."""
+PROMPT_MULTIPLE_END = """
+--- End diff ---
 
+Best to Worst Commit Messages:
+1.
+2.
+3.
+4.
+5."""
+PROMPT_SINGLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a single commit message that summarizes all the changes made. I will use the Conventional Commits guidelines as a reference, but prioritize creating a message that encompasses all changes."""
+PROMPT_SINGLE_START = """Please generate a single commit message that describes all the changes made in the following diff, using the Conventional Commits guidelines as a reference:
 
-def generate_prompt_template(prompt_type, template_type):
-    prompt = PROMPT_PREFIX_SINGLE if prompt_type == "single" else PROMPT_PREFIX_MULTIPLE
+--- Begin diff ---
+"""
 
-    if template_type == "filenames":
-        prompt += PROMPT_TEMPLATE_FILENAMES
-    elif template_type == "gitlog":
-        prompt += PROMPT_TEMPLATE_GITLOG
-    else:
-        prompt += PROMPT_TEMPLATE_CONVCOMMITS
+PROMPT_SINGLE_END = """
+--- End diff ---
 
-    prompt += PROMPT_SUFFIX_SINGLE if prompt_type == "single" else PROMPT_SUFFIX_MULTIPLE
-
-    prompt += PROMPT_CHECKLIST_PREFIX
-
-    if template_type == "filenames":
-        prompt += PROMPT_CHECKLIST_FILENAMES
-    elif template_type == "gitlog":
-        prompt += PROMPT_CHECKIST_GITLOG
-    else:
-        prompt += PROMPT_CHECKLIST_CONVCOMMITS
-
-    prompt += PROMPT_CHECKLIST_SUFFIX_SINGLE if prompt_type == "single" else PROMPT_CHECKLIST_SUFFIX_MULTIPLE
-
-    return prompt
+Commit Message: """
 
 
 def setup_logging(level="DEBUG", show_module=False):
@@ -179,46 +159,20 @@ def fix_message(message):
     return message
 
 
-def filter_similar_lines(lines, threshold=0.8):
-    unique_lines = []
+def filter_and_sort_similar_strings(strings, similarity_threshold=70):
+    # Sorting the strings based on total similarity scores
+    string_scores = []
+    for s in strings:
+        total_score = sum(fuzz.partial_ratio(s, other_s) for other_s in strings)
+        string_scores.append((s, total_score))
+    sorted_strings = sorted(string_scores, key=lambda x: x[1], reverse=True)
 
-    for line in lines:
-        # Check for similarity with all unique_lines using fuzz.partial_token_sort_ratio
-        similar_lines = [
-            unique_line for unique_line in unique_lines if fuzz.partial_token_sort_ratio(line, unique_line) >= threshold * 100
-        ]
-
-        # If we find any similar lines, continue to the next line
-        if similar_lines:
-            continue
-
-        # Otherwise, add the line to unique_lines
-        unique_lines.append(line)
-
-    logger.debug(f"Removed {len(lines) - len(unique_lines)} similar lines")
-    return unique_lines
-
-def generate_final_message(messages):
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        n=1,
-        top_p=1,
-        temperature=0.2,
-        stop=["\n"],
-        max_tokens=50,
-        messages=[{
-            "role": "system",
-            "content": generate_prompt_template("single", "convcommits")
-        }, {
-            "role": "user",
-            "content": "Combine the suggestions provided below to create a single, concise commit message without special characters or emojis. " +
-            "Feel free to use, modify, or enhance these suggestions as necessary, while maintaining the essence of the original ideas. " +
-            "Ensure that the final commit message is in a single line and effectively communicates the purpose of the commit." +
-            "\n".join(messages)
-        }])
-    message = response.choices[0].message.content
-    message = fix_message(message)
-    return message
+    # Filtering out similar strings
+    unique_strings = []
+    for s, _ in sorted_strings:
+        if not any(fuzz.partial_ratio(s, unique_s) >= similarity_threshold for unique_s in unique_strings):
+            unique_strings.append(s)
+    return unique_strings
 
 
 def send_request(diff):
