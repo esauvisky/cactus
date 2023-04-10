@@ -3,11 +3,12 @@
 CACTUS Automates Commits Through Uncomplicated Suggestions
 """
 __author__ = "emi"
-__version__ = "2.0.2"
+__version__ = "2.1.0"
 __license__ = "MIT"
 
 import argparse
 import os
+import time
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import re
