@@ -266,51 +266,54 @@ if __name__ == "__main__":
     else:
         setup_logging("INFO")
 
-    if args.command == "setup":
+    if args.setup:
         setup_openai_token()
         sys.exit(0)
 
     openai_token = load_openai_token()
     if openai_token is None:
-        logger.error("OpenAI token not found. Please run `cactus setup` first.")
+        logger.error("OpenAI token not found. Please run `cactus --setup` first.")
         sys.exit(1)
     openai.api_key = openai_token
 
     responses = None
 
-    groups = get_git_diff_groups()
+    previous_sha = run("git rev-parse --short HEAD").stdout
+    full_diff = get_git_diff(args.context_size)
+    groups = group_hunks(full_diff, args.n, args.affinitty)
 
     patches = []
     logger.info(f"Separated into {len(groups)} groups of changes from {sum([len(g) for g in groups.values()])} hunks")
     for n, hunks in enumerate(groups.values(), 1):
-        logger.info(f"Generating commit message for group {n}...")
-        diff = "\n".join([str(hunk[1]) for hunk in hunks])
+        diff = "\n".join([get_modified_lines(hunk[1]) for hunk in hunks])
         responses = send_request(diff)
         clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
         commit_messages = [choice for choice in clean_responses]
-        logger.debug(f"Commit messages: {commit_messages}")
+        logger.info(f"Generated commit messages for group {n} with {len(hunks)} hunks: {commit_messages}")
         patches.append((hunks, commit_messages))
 
-    logger.success(f"Generated {len(patches)} commits from {len(groups)} groups ({', '.join([str(len(g)) for g in groups.values()])})")
+    logger.debug(f"Generated {len(patches)} commits for {len(groups)} groups (sizes: {', '.join([str(len(g)) for g in groups.values()])})")
 
-    # subprocess.run(f"git restore --staged .", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    for hunks, commit_messages in patches:
-        diff = "\n".join([str(hunk[1]) for hunk in hunks])
-        # pydoc.pipepager(diff, cmd='less -R')
-        console = Console()
-        with console.pager(styles=True):
-            console.print(diff)
-        message, _ = pick.pick(commit_messages, "Pick a suggestion:", indicator='=>', default_index=0)
-        # subprocess.run(f"less {patch_path}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    # unstage all staged changes
+    logger.info("Unstaging all staged changes and applying individual diffs...")
+    run("git restore --staged .")
+    time.sleep(1)
 
-        # Make the commit with the chosen commit message
-        stage_changes(hunks)
-        # for patch_path in patches_path:
-        #     subprocess.run(
-        #         f"git apply --cached {patch_path}",
-        #         shell=True,
-        #         stdout=subprocess.PIPE,
-        #         stderr=subprocess.PIPE,
-        #         check=True)
-        subprocess.run(
-            f"git commit -m '{message}'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    try:
+        for hunks, commit_messages in patches:
+            diff = "\n".join([hunk[1] for hunk in hunks])
+            stage_changes(hunks)
+            os.system('echo -e "\e[1;35mInspect the diff below and press Q when done.\n\n$(git diff --staged --color=always)" | less -R ')
+
+            message, _ = pick.pick(commit_messages, r'\e[1;35m' + "Choose a commit message for the preceding differences. Press Ctrl+C to quit and restore all current changes.", indicator='=>', default_index=0)
+            run(f"git commit -m '{message}'")
+    except Exception as e:
+        logger.error(f"Failed to stage changes: {e}. Will restore the changes and exit.")
+        run(f"git reset {previous_sha}")
+        restore_changes(full_diff)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        logger.error("Aborted by user. Will restore the changes and exit.")
+        run(f"git reset {previous_sha}")
+        restore_changes(full_diff)
+        sys.exit(1)
