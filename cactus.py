@@ -248,12 +248,17 @@ if __name__ == "__main__":
     PARSER = argparse.ArgumentParser(prog="cactus", formatter_class=Formatter)
     PARSER.add_argument("-d", "--debug", action="store_true", help="Show debug messages")
 
-    sub_parsers = PARSER.add_subparsers(dest="command")
-    setup_parser = sub_parsers.add_parser("setup", help="Initial setup of the configuration file")
-    pick_parser = sub_parsers.add_parser(
-        "pick", help="Generates commit messages for staged changes and lets you choose one (default)")
+    PARSER.add_argument("n", nargs="?", type=int, default=None, help="Number of commit messages to generate")
+    PARSER.add_argument("-a", "--affinitty", type=float, default=0.1, help="Affinity of the model used to group the commit messages (lower is more commits)")
+    PARSER.add_argument(
+        "-c",
+        "--context-size",
+        nargs="?",
+        type=int,
+        default=0,
+        help="Context size of the git diff (lines before and after each hunk)")
+    PARSER.add_argument("--setup", action="store_true", help="Initial setup of the configuration file")
 
-    sub_parsers.default = "pick"
     args = PARSER.parse_args()
 
     if args.debug:
