@@ -225,11 +225,19 @@ def send_request(diff):
     # Filter out similar commit messages
     fixed_messages = []
     for message in messages:
-        if not pattern.match(message):
+        fixed_message = fix_message(message)
+        if not pattern.match(fixed_message):
             continue
-        fixed_messages.append(fix_message(message))
-    unique_messages = [generate_final_message(fixed_messages), *filter_similar_lines(fixed_messages, SIMILARITY_THRESHOLD)]
+        fixed_messages.append(fixed_message)
+    unique_messages = filter_and_sort_similar_strings(fixed_messages, SIMILARITY_THRESHOLD)
     return unique_messages
+
+
+def restore_changes(full_diff):
+    with open("/tmp/cactus.diff", "w") as f:
+        f.write(full_diff)
+        f.write("\n")
+    run("git apply --cached --unidiff-zero /tmp/cactus.diff")
 
 
 if __name__ == "__main__":
