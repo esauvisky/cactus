@@ -49,3 +49,26 @@ Follow these steps to install Cactus on your system:
 1.  Run `cactus` once and enter your OpenAPI token.
 1.  You're all set!
 1.  Yeah, yeah, I'll make it a pip package one day.
+
+## Installation for Windows Users
+
+Follow these steps to install Cactus on your system:
+
+1. Change to the directory where Cactus is located using the command `cd /path/to/Cactus/`.
+2. Create a virtual environment using the command `python -m venv .venv`.
+3. Activate the virtual environment using the command `.venv\Scripts\activate.bat`.
+4. Install the required libraries using pip with the command `pip install -r requirements.txt`.
+5. Create a batch script at `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps` that runs the Cactus script within the virtual environment:
+
+```batch
+@echo off
+set MAIN_DIR=/path/to/Cactus/
+
+cd "%CD%"
+call "%MAIN_DIR%\.venv\Scripts\activate.bat"
+python "%MAIN_DIR%\cactus.py" %*
+```
+> Don't forget to edit `MAIN_DIR` above!
+6. Rename the batch script to `cactus.bat`.
+7. Run `cactus` once and enter your OpenAPI token.
+8. You're all set!
