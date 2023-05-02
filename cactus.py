@@ -316,4 +316,3 @@ if __name__ == "__main__":
         logger.error("Aborted by user. Will restore the changes and exit.")
         run(f"git reset {previous_sha}")
         restore_changes(full_diff)
-        sys.exit(1)
