@@ -1,6 +1,8 @@
 # Cactus Automates Commits Through Uncomplicated Suggestions
 
-![Cactus Demo](./.video.mp4)
+
+https://user-images.githubusercontent.com/18354658/235790779-f8f6cf40-1bd8-4105-9cb0-9e158999d53a.mp4
+
 
 ## About
 
