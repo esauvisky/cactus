@@ -83,7 +83,7 @@ def similarity_matrix(hunks, type='count', stop_words=None):
         matrix = cosine_similarity(tfidf_matrix, tfidf_matrix)
     elif type == 'count':
         # Compute the Bag of Words matrix for the hunks
-        vectorizer = CountVectorizer()
+        vectorizer = CountVectorizer(stop_words=stop_words, lowercase=False)
         bow_matrix = vectorizer.fit_transform(hunks)
 
         # Calculate the pairwise cosine similarity between the matrix rows
