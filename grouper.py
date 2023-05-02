@@ -1,17 +1,21 @@
-import re
-import subprocess
 import os
+import re
 import shlex
+import subprocess
+from collections import Counter
+from tempfile import NamedTemporaryFile
+
+import matplotlib.pyplot as plt
 import numpy as np
-from unidiff import PatchSet, PatchedFile, UnidiffParseError, Hunk
+from loguru import logger
 from scipy.cluster import hierarchy
 from sklearn.cluster import AgglomerativeClustering
-from tempfile import NamedTemporaryFile
-from loguru import logger
-from thefuzz import fuzz
-
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import cosine_similarity
+from thefuzz import fuzz
+from unidiff import Hunk, PatchedFile, PatchSet, UnidiffParseError
+
 
 def jaccard_similarity(str1, str2):
     words1 = set(str1.split())
