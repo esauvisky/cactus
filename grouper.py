@@ -30,10 +30,53 @@ def jaccard_similarity(str1, str2):
     return len(intersection) / len(union)
 
 
-def similarity_matrix(hunks, type='fuzzy'):
+def get_most_common_words(hunks, n=10):
+    word_counts = Counter()
+
+    for hunk in hunks:
+        words = re.findall(r'\w+', get_modified_lines(hunk))
+        word_counts.update(words)
+
+    return [word for word, _ in word_counts.most_common(n)]
+
+
+def get_optimal_n_common_words(hunks, min_n=1, max_n=50):
+    explained_variances = []
+
+    for n in range(min_n, max_n + 1):
+        # Get the most common words for the current value of n
+        most_common_words = get_most_common_words(hunks, n=n)
+
+        # Calculate the similarity matrix while ignoring the most common words
+        matrix = similarity_matrix(hunks, type='count', stop_words=most_common_words)
+
+        # Calculate the explained variance for the current n
+        explained_variance = np.sum(np.var(matrix, axis=0))
+        explained_variances.append(explained_variance)
+
+    # Plot the explained variance as a function of n
+    # plt.plot(range(min_n, max_n + 1), explained_variances)
+    # plt.xlabel('Number of Most Common Words Ignored')
+    # plt.ylabel('Explained Variance')
+    # plt.show()
+
+    # Find the optimal n using the elbow method
+    optimal_n = min_n
+    max_diff = 0
+    for i in range(1, len(explained_variances) - 1):
+        diff = explained_variances[i - 1] - explained_variances[i + 1]
+        if diff > max_diff:
+            max_diff = diff
+            optimal_n = i + min_n
+
+    # return the words that we want to ignore
+    return get_most_common_words(hunks, optimal_n)
+
+
+def similarity_matrix(hunks, type='count', stop_words=None):
     if type == 'tfidf':
         # Compute the TF-IDF matrix for the hunks
-        vectorizer = TfidfVectorizer()
+        vectorizer = TfidfVectorizer(stop_words=stop_words, lowercase=False)
         tfidf_matrix = vectorizer.fit_transform(hunks)
 
         # Calculate the pairwise cosine similarity
@@ -78,13 +121,17 @@ def get_modified_lines(hunk):
 def group_hunks(git_diff, n_clusters, affinity_threshold):
     # Parse hunks from the git_diff
     patch_set = PatchSet(git_diff)
-    hunk_data = [(patched_file, str(hunk)) for patched_file in patch_set for hunk in patched_file]
+    hunks = [(patched_file, str(hunk)) for patched_file in patch_set for hunk in patched_file]
 
-    if len(hunk_data) <= 2:
-        return {0: hunk_data}
+    if len(hunks) <= 2:
+        return {0: hunks}
+
+    # Get the most common words in the hunks
+    most_common_words = get_optimal_n_common_words([hunk for _, hunk in hunks])
+    logger.debug("Most common words: {}".format(most_common_words))
 
     # Calculate the similarity matrix
-    matrix = similarity_matrix([get_modified_lines(h[1]) for h in hunk_data])
+    matrix = similarity_matrix([get_modified_lines(h[1]) for h in hunks], stop_words=most_common_words)
 
     # Perform clustering using AgglomerativeClustering
     clustering = AgglomerativeClustering(
@@ -96,7 +143,7 @@ def group_hunks(git_diff, n_clusters, affinity_threshold):
     for idx, label in enumerate(clustering.labels_):
         if label not in clusters:
             clusters[label] = []
-        clusters[label].append(hunk_data[idx])
+        clusters[label].append(hunks[idx])
 
     return clusters
 
