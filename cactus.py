@@ -303,10 +303,17 @@ def generate_changes(args):
         for hunks, commit_messages in patches:
             diff = "\n".join([hunk[1] for hunk in hunks])
             stage_changes(hunks)
-            os.system('echo -e "\e[1;35mInspect the diff below and press Q when done.\n\n$(git diff --staged --color=always)" | less -R ')
 
-            message, _ = pick.pick(commit_messages, r'\e[1;35m' + "Choose a commit message for the preceding differences. Press Ctrl+C to quit and restore all current changes.", indicator='=>', default_index=0)
-            run(f"git commit -m '{message}'")
+            # Check if there is only one commit message option
+            if len(commit_messages) == 1:
+                message = commit_messages[0]
+                logger.info(f"Only one commit message available. Proceeding with auto-commit: {message}")
+                run(f"git commit -m '{message}'")
+            else:
+                # If there are multiple commit messages, let the user pick one
+                os.system('echo -e "\e[1;35mInspect the diff below and press Q when done.\n\n$(git diff --staged --color=always)" | less -R ')
+                message, _ = pick.pick(commit_messages, r'\e[1;35m' + "Choose a commit message for the preceding differences. Press Ctrl+C to quit and restore all current changes.", indicator='=>', default_index=0)
+                run(f"git commit -m '{message}'")
     except Exception as e:
         logger.error(f"Failed to stage changes: {e}. Will restore the changes and exit.")
         run(f"git reset {previous_sha}")
