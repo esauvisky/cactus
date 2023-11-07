@@ -183,7 +183,7 @@ def fix_message(message):
     return message
 
 
-def filter_and_sort_similar_strings(strings, similarity_threshold=80):
+def filter_and_sort_similar_strings(strings, similarity_threshold=90):
     # Sorting the strings based on total similarity scores
     string_scores = []
     for s in strings:
