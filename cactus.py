@@ -133,6 +133,7 @@ def run(cmd):
     result.stderr = result.stderr.decode("utf-8").strip()
     return result
 
+
 def get_git_diff(context_size):
     # Check if there are staged changes
     result = run("git diff --cached --quiet --exit-code")
