@@ -47,7 +47,7 @@ Best to Worst Commit Messages:
 3.
 4.
 5."""
-PROMPT_SINGLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a single commit message that summarizes all the changes made. I will use the Conventional Commits guidelines as a reference, but prioritize creating a message that encompasses all changes."""
+PROMPT_SINGLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a single commit message that summarizes all the changes made. I will use the Conventional Commits guidelines as a reference, but prioritize creating a message that encompasses all changes. Return only the commit message and absolutely nothing else. No special characters or newlines should be provided."""
 PROMPT_SINGLE_START = """Please generate a single commit message that describes all the changes made in the following diff, using the Conventional Commits guidelines as a reference:
 
 --- Begin diff ---
@@ -146,7 +146,7 @@ def get_git_diff(context_size):
     # cmd += f"--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --no-renames --unified={context_size}"
 
     # cmd += "--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv "
-    cmd = f"git diff --inter-hunk-context={context_size} -U2 --minimal -p --staged"
+    cmd = f"git diff --inter-hunk-context={context_size} -U3 --minimal -p --staged"
     # cmd += f"--unified=3"
     result = run(cmd)
     if result.returncode != 0:
@@ -176,6 +176,10 @@ def fix_message(message):
     # Remove periods at the end of the message
     message = re.sub(pattern_no_period, "", message)
 
+    # Remove quotes at the beginning and end
+    message = re.sub("^\"", "", message)
+    message = re.sub("\"$", "", message)
+
     return message
 
 
@@ -200,7 +204,8 @@ def send_request(diff):
     pattern = re.compile(r"^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9_-]+\))?: [a-z].*$",
                          re.IGNORECASE)
     # for ammount, temp, model, single_or_multiple in [(3, 0.6, "gpt-3.5-turbo-16k", "single"), (2, 1.1, "gpt-3.5-turbo-16k", "multiple")]:
-    for ammount, temp, model, single_or_multiple in [(2, 0.95, "gpt-4", "multiple")]:
+    # for ammount, temp, model, single_or_multiple in [(2, 0.95, "gpt-4", "multiple")]:
+    for ammount, temp, model, single_or_multiple in [(1, 0.95, "gpt-4", "single")]:
     # for ammount, temp, model, single_or_multiple in [(5, 0.1, "gpt-4-1106-preview", "multiple")]:
         response = openai.ChatCompletion.create(
             model=model,
