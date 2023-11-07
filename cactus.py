@@ -8,6 +8,7 @@ __license__ = "MIT"
 
 import argparse
 import os
+import pprint
 import time
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -18,10 +19,10 @@ import sys
 import openai
 import pick
 from loguru import logger
-from rich.console import Console
 from thefuzz import fuzz
+import tiktoken
 
-from grouper import get_modified_lines, group_hunks, stage_changes
+from grouper import group_hunks, stage_changes, extract_renames
 
 SIMILARITY_THRESHOLD = 70
 
