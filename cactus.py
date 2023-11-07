@@ -199,8 +199,9 @@ def send_request(diff):
     messages = []
     pattern = re.compile(r"^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9_-]+\))?: [a-z].*$",
                          re.IGNORECASE)
-    # for ammount, temp, model, single_or_multiple in [(3, 0.6, "gpt-3.5-turbo", "single"), (2, 1.1, "gpt-3.5-turbo", "multiple")]: #(1, 0.95, "gpt-4", "multiple")]:
-    for ammount, temp, model, single_or_multiple in [(5, 0.8, "gpt-3.5-turbo", "single")]:
+    # for ammount, temp, model, single_or_multiple in [(3, 0.6, "gpt-3.5-turbo-16k", "single"), (2, 1.1, "gpt-3.5-turbo-16k", "multiple")]:
+    for ammount, temp, model, single_or_multiple in [(2, 0.95, "gpt-4", "multiple")]:
+    # for ammount, temp, model, single_or_multiple in [(5, 0.1, "gpt-4-1106-preview", "multiple")]:
         response = openai.ChatCompletion.create(
             model=model,
             n=ammount,
