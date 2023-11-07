@@ -159,8 +159,11 @@ def group_hunks(git_diff, n_clusters, affinity_threshold):
     matrix = similarity_matrix([get_modified_lines(h[1]) for h in hunks], stop_words=most_common_words)
 
     # Perform clustering using AgglomerativeClustering
-    clustering = AgglomerativeClustering(
-        n_clusters=n_clusters, metric="precomputed", linkage="average", distance_threshold=1 - affinity_threshold)
+    if n_clusters:
+        clustering = AgglomerativeClustering(n_clusters=n_clusters, metric="precomputed", linkage="average")
+    else:
+        clustering = AgglomerativeClustering(
+            n_clusters=None, metric="precomputed", linkage="average", distance_threshold=1 - affinity_threshold)
     clustering.fit(1 - matrix)
 
     # Create clusters of hunks
