@@ -1,32 +1,59 @@
-# Cactus Automates Commits Through Uncomplicated Suggestions
+# Cactus: Streamlined Commit Messaging
 
+## About Cactus
 
-https://user-images.githubusercontent.com/18354658/235790779-f8f6cf40-1bd8-4105-9cb0-9e158999d53a.mp4
+Cactus is a developer's assistant that modernizes the commit process by automating commit message generation. It leverages OpenAI's cutting-edge language models to analyze staged code changes and formulate meaningful commit messages that adhere to Conventional Commits standards. Cactus simplifies version control documentation, making it more maintainable and understandable.
 
+## What's New in Cactus
 
-## About
+- **Interactive Changelog Creation**: Compile detailed changelogs from your commit history, styled for public release notes.
+- **Advanced Diff Grouping**: Improved algorithms for segmenting changeset hunks mean smarter, more relevant commit message suggestions.
+- **Enhanced Rename Detection**: Redesigned to account for file and directory renames to maintain a transparent, traceable commit history.
 
-Cactus is a tool that automates the commit process by automatically generating commit messages suggestions based on the staged changes. It uses the OpenAPI CLI to generate the suggestions.
+## Watch Cactus in Action
 
-___
+![Demo](demo.mp4)
 
-## Usage
+*Click the image above to see how Cactus transforms your commit process.*
 
-1. Stage your changes:
+## Getting Started
 
-       $ git add [...]
-1. Run `cactus`:
+Follow the step-by-step instructions below to install and configure Cactus.
+For system-specific setup guidelines, skip to the corresponding section after completing the general steps.
 
-       $ cactus
-1. Celebrate for lazyness.
+### General Setup Instructions
 
-___
+1. Clone the Cactus repository and move to its directory:
+   ```sh
+   git clone https://github.com/your-username/Cactus.git
+   cd Cactus
+   ```
+2. Create and activate a virtual environment:
+   ```sh
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+3. Install Python dependencies:
+   ```sh
+   pip install -r requirements.txt
+   ```
+4. Configure Cactus with your OpenAI token by running:
+   ```sh
+   cactus setup
+   ```
+5. Use the `cactus` command followed by a subcommand to start automating your commit messages.
 
-## Requirements
+## Detailed Command Guide
 
--   Python 3.6 or higher
--   OpenAPI CLI
--   A bunch of pip packages
+- `cactus generate`: Invokes AI-powered analysis to generate commit messages. Optional options:
+  - `NUM`: Number of commits to generate.
+  - `-a AFFINITY`: Affinity for message grouping (0.0 - 1.0).
+- `cactus changelog`: Builds a changelog from a specified commit hash to the current HEAD.
+  - `SHA`: Starting commit for changelog generation.
+  - `-p PATHSPEC`: Consider changes solely within the given paths.
+- `cactus setup`: Sets the OpenAI token for utilizing the AI model services.
+
+Remember to check the `--help` option for each subcommand to learn more about its functionalities and options.
 
 ## Installation
 
@@ -74,3 +101,7 @@ python "%MAIN_DIR%\cactus.py" %*
 6. Rename the batch script to `cactus.bat`.
 7. Run `cactus` once and enter your OpenAPI token.
 8. You're all set!
+
+## Contribute
+
+Cactus is an open-source project, and contributions are warmly welcomed. Whether it's through reporting bugs, suggesting improvements, or adding new features, your input is valuable and appreciated. Join us in enhancing Cactus by submitting pull requests and sharing your ideas through issues on our GitHub repository.
