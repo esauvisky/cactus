@@ -64,3 +64,4 @@ urllib3==1.26.15
 Werkzeug==2.2.3
 wrapt==1.14.1
 yarl==1.8.2
+matplotlib==3.7.1
