@@ -292,6 +292,8 @@ def generate_changes(args):
     run("git restore --staged .")
     time.sleep(1)
 
+    # try:
+    # Handle renames first
     try:
         for hunks, commit_messages in patches:
             diff = "\n".join([hunk[1] for hunk in hunks])
