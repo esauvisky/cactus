@@ -119,12 +119,36 @@ def get_modified_lines(hunk):
     return '\n'.join(filtered_lines)
 
 
+def extract_renames(git_diff):
+    patch_set = PatchSet(git_diff)
+    hunks = [(patched_file, str(hunk)) for patched_file in patch_set for hunk in patched_file]
+    renames = []
+    clean_diff = []
+
+    for patched_file in patch_set:
+        if patched_file.is_rename:
+            renames.append((patched_file, str(patched_file)))
+        else:
+            clean_diff.append(str(patched_file))
+
+    return renames, clean_diff
+
+
+def create_rename_hunks(renames):
+    rename_hunks = []
+    for old_name, new_name in renames:
+        # Create a synthetic hunk string representing the rename
+        synthetic_hunk = f"--- a/{old_name}\n+++ b/{new_name}\n"
+        rename_hunks.append((old_name, new_name, synthetic_hunk))
+    return rename_hunks
+
+
 def group_hunks(git_diff, n_clusters, affinity_threshold):
     # Parse hunks from the git_diff
     patch_set = PatchSet(git_diff)
     hunks = [(patched_file, str(hunk)) for patched_file in patch_set for hunk in patched_file]
 
-    if len(hunks) <= 2:
+    if len(hunks) < 2:
         return {0: hunks}
 
     # Get the most common words in the hunks
@@ -170,15 +194,57 @@ def group_hunks_by_cluster(hunks, clusters):
     return grouped_hunks
 
 
+# Assuming that renames are a list of tuples with (old_name, new_name)
+def generate_rename_hunks(renames):
+    # We simulate a hunk with the renaming information
+    hunks = []
+    for rename in renames:
+        # print(rename)
+        old_name, new_name = rename
+        hunk_text = f"rename from {old_name}\nrename to {new_name}\n"
+        hunk = (None, hunk_text) # We use None to denote that it's not an actual file change
+        hunks.append(hunk)
+    return hunks
+
+
+def stage_renames(renames):
+    # Use git mv to handle renames and stage them
+    for rename in renames:
+        # Handle regular changes
+        with NamedTemporaryFile(mode='w', prefix='.tmp_patch_', delete=False) as fd:
+            # pprint.pprint(hunks)
+            # No need to join on patch_info since it's a string already included in the hunk data
+            filename = fd.name
+
+        for patched_file, hunk in rename:
+            with open(filename, 'a') as fd:
+                fd.write(f"--- {patched_file.source_file}\n")
+                fd.write(f"+++ {patched_file.target_file}\n")
+                fd.write(str(hunk))
+                fd.write("\n")
+
+        # Apply the patch file
+        subprocess.run(
+            f'git apply --cached --unidiff-zero {filename}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # old_name, new_name = patched_file.source_file, patched_file.target_file
+        # subprocess.run(['git', 'mv', old_name, new_name], check=True)
+        # subprocess.run(['git', 'add', new_name], check=True)
+
 def stage_changes(hunks):
+    # Handle regular changes
     with NamedTemporaryFile(mode='w', prefix='.tmp_patch_', delete=False) as fd:
-        fd.write("".join(hunks[0][0].patch_info))
+        # pprint.pprint(hunks)
+        # No need to join on patch_info since it's a string already included in the hunk data
         filename = fd.name
-        for hunk_info in hunks:
-            patched_file, hunk = hunk_info
+
+    for patched_file, hunk in hunks:
+        with open(filename, 'a') as fd:
             fd.write(f"--- {patched_file.source_file}\n")
             fd.write(f"+++ {patched_file.target_file}\n")
             fd.write(str(hunk))
             fd.write("\n")
+
+    # Apply the patch file
     subprocess.run(
         f'git apply --cached --unidiff-zero {filename}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

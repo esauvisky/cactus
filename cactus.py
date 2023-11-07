@@ -58,6 +58,13 @@ PROMPT_SINGLE_END = """
 
 Commit Message: """
 
+PROMPT_CHANGELOG = """Examine the following compilation git diffs, which capture all modifications made between the most recent development version of our software and the currently released, public, production version.
+
+Your task is to interpret this data, employing critical thinking and the contextual clues surrounding the changes, to construct a comprehensive changelog intended for the end user. This changelog will serve as the centerpiece of an upcoming announcement.
+
+Approach this task methodically, scrutinizing each change to avoid any inaccuracies. Your meticulous attention to detail will help ensure the accuracy of this changelog. Return your finished changelog IN ITS ENTIRETY as a textual description, one line at a time, beginning with the most recently marked version, down to the preceding release, and ending with the original public production version.
+"""
+
 
 def setup_logging(level="DEBUG", show_module=False):
     """
@@ -240,59 +247,42 @@ def restore_changes(full_diff):
         f.write("\n")
     run("git apply --cached --unidiff-zero /tmp/cactus.diff")
 
-
-if __name__ == "__main__":
-
-    class Formatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
-        pass
-
-    PARSER = argparse.ArgumentParser(prog="cactus", formatter_class=Formatter)
-    PARSER.add_argument("-d", "--debug", action="store_true", help="Show debug messages")
-
-    PARSER.add_argument("n", nargs="?", type=int, default=None, help="Number of commit messages to generate")
-    PARSER.add_argument("-a", "--affinitty", type=float, default=0.1, help="Affinity of the model used to group the commit messages (lower is more commits)")
-    PARSER.add_argument(
-        "-c",
-        "--context-size",
-        nargs="?",
-        type=int,
-        default=0,
-        help="Context size of the git diff (lines before and after each hunk)")
-    PARSER.add_argument("--setup", action="store_true", help="Initial setup of the configuration file")
-
-    args = PARSER.parse_args()
-
-    if args.debug:
-        setup_logging("DEBUG")
-    else:
-        setup_logging("INFO")
-
-    if args.setup:
-        setup_openai_token()
-        sys.exit(0)
-
-    openai_token = load_openai_token()
-    if openai_token is None:
-        logger.error("OpenAI token not found. Please run `cactus --setup` first.")
-        sys.exit(1)
-    openai.api_key = openai_token
-
+def generate_changes(args):
     responses = None
-
     previous_sha = run("git rev-parse --short HEAD").stdout
+
     full_diff = get_git_diff(args.context_size)
-    groups = group_hunks(full_diff, args.n, args.affinitty)
+    renamed, clean_diff = extract_renames(full_diff)
+    groups = group_hunks("\n".join(clean_diff), args.n, args.affinitty)
+
+
+    # Now handle renames separately or log them as needed
+    renames = []
+    if len(renamed):
+        responses = send_request(str(renamed))
+        # print(str(renamed))
+        clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
+        clean_responses = set([r.replace("`", "") for r in clean_responses])
+        commit_messages = [choice for choice in clean_responses]
+        logger.info(f"Generated commit messages for renames: {commit_messages}")
+        renames.append((renamed, commit_messages))
 
     patches = []
     logger.info(f"Separated into {len(groups)} groups of changes from {sum([len(g) for g in groups.values()])} hunks")
     for n, hunks in enumerate(groups.values(), 1):
         diff = "\n".join([hunk[1] for hunk in hunks])
+        token_count = num_tokens_from_string(diff)
+        if token_count > 16000:
+            logger.error(f"This diff is too big, ignoring it")
+            continue
         responses = send_request(diff)
         clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
+        clean_responses = set([r.replace("`", "") for r in clean_responses])
         commit_messages = [choice for choice in clean_responses]
         logger.info(f"Generated commit messages for group {n} with {len(hunks)} hunks: {commit_messages}")
         patches.append((hunks, commit_messages))
 
+    patches.extend(renames)
     logger.debug(f"Generated {len(patches)} commits for {len(groups)} groups (sizes: {', '.join([str(len(g)) for g in groups.values()])})")
 
     # unstage all staged changes
@@ -317,3 +307,170 @@ if __name__ == "__main__":
         logger.error("Aborted by user. Will restore the changes and exit.")
         run(f"git reset {previous_sha}")
         restore_changes(full_diff)
+
+
+
+def num_tokens_from_string(text, model="gpt-3.5-turbo-16k-0613"):
+    """Return the number of tokens used by a list of messages."""
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        print("Warning: model not found. Using cl100k_base encoding.")
+        encoding = tiktoken.get_encoding("cl100k_base")
+    if model in {
+            "gpt-3.5-turbo-0613",
+            "gpt-3.5-turbo-16k-0613",
+            "gpt-4-0314",
+            "gpt-4-32k-0314",
+            "gpt-4-0613",
+            "gpt-4-32k-0613",
+    }:
+        tokens_per_message = 3
+        tokens_per_name = 1
+    elif model == "gpt-3.5-turbo-0301":
+        tokens_per_message = 4 # every message follows <|start|>{role/name}\n{content}<|end|>\n
+        tokens_per_name = -1   # if there's a name, the role is omitted
+    elif "gpt-3.5-turbo" in model:
+        print("Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.")
+        return num_tokens_from_string(text, model="gpt-3.5-turbo-0613")
+    elif "gpt-4" in model:
+        print("Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.")
+        return num_tokens_from_string(text, model="gpt-4-0613")
+    else:
+        raise NotImplementedError(f"num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.")
+    num_tokens = len(encoding.encode(text))
+    num_tokens += 3            # every reply is primed with <|start|>assistant<|message|>
+    num_tokens += tokens_per_message + tokens_per_name
+    return num_tokens
+
+
+def split_into_chunks(text, max_tokens=12288):
+    """
+    Split the text into chunks of the specified size.
+    """
+    tokens = text.split('\n')
+    chunks = []
+    chunk = ''
+    for token in tokens:
+        if num_tokens_from_string(chunk + '\n' + token) > max_tokens:
+            chunks.append(chunk)
+            chunk = ''
+        chunk += '\n' + token
+    chunks.append(chunk)
+    return chunks
+
+
+def generate_changelog(args):
+    # get list of commit messages from args.sha to HEAD
+    commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.split('\n')
+
+    # prepare exclude patterns for git diff
+    pathspec = f"-- {args.pathspec}" if args.pathspec else ''
+
+    # get git diff from args.sha to HEAD
+    diff = run(f"git diff --ignore-all-space --ignore-blank-lines -U{args.context_size} {args.sha} {pathspec}").stdout
+    err = run(f"git diff --ignore-all-space --ignore-blank-lines -U{args.context_size} {args.sha} {pathspec}").stderr
+
+    if err:
+        logger.error(f"An error occurred while getting git diff: {err}")
+        sys.exit(1)
+
+    # Split the diff into chunks if it exceeds the token limit
+    chunks = split_into_chunks(diff, 8192 - 64)
+
+    logger.debug(diff)
+
+    if len(chunks) > 1:
+        logger.warning(f"Diff went over max token limit ({num_tokens_from_string(diff)} > 15000). Splitted into {len(chunks)} chunks.")
+
+    changelog = ''
+    for chunk in chunks:
+        # send request and append result to changelog
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo-16k",
+            n=1,
+            top_p=1,
+            temperature=0.2,
+            stop=None,
+            max_tokens=200,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "As a highly skilled AI, you will provide me with a properly formatted changelog targeting the final user, in a list form using Markdown, and nothing else."
+                },
+                {
+                    "role": "user",
+                    "content": PROMPT_CHANGELOG + f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n"
+                    # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
+                },
+            ],
+        )
+        changelog += response.choices[0].message.content
+
+    logger.debug(pprint.pformat(response))
+    logger.info(f"{changelog}")
+
+
+if __name__ == "__main__":
+
+    class Formatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+        pass
+
+    PARSER = argparse.ArgumentParser(prog="cactus", formatter_class=Formatter, allow_abbrev=True)
+    PARSER.add_argument("-d", "--debug", action="store_true", help="Show debug messages")
+    PARSER.add_argument(
+        "-c",
+        "--context-size",
+        nargs="?",
+        type=int,
+        default=0,
+        help="Context size of the git diff (lines before and after each hunk)")
+    PARSERS = PARSER.add_subparsers(title="subcommands", dest="action")
+    GENERATE_PARSER = PARSERS.add_parser(
+        "generate",
+        formatter_class=Formatter,
+        add_help=False,
+        help="Generates commit messages for all the currently staged changes")
+    GENERATE_PARSER.add_argument("n", nargs="?", type=int, default=0, help="Number of separate commits to generate")
+    GENERATE_PARSER.add_argument(
+        "-a", "--affinitty", type=float, default=0.1, help="Affinity of the model (lower is more commits)")
+    CHANGELOG_PARSER = PARSERS.add_parser(
+        "changelog",
+        formatter_class=Formatter,
+        add_help=False,
+        help="Generates a changelog between the HEAD commit and a target commit")
+    CHANGELOG_PARSER.add_argument(
+        "-p", "--pathspec", action="store", nargs="?", help="Get changelogs for these pathspecs only")
+    CHANGELOG_PARSER.add_argument("sha", nargs="?", help="Target commit SHA from which to generate the changelog")
+    SETUP_PARSER = PARSERS.add_parser(
+        "setup", help="Performs the initial setup for setting the OpenAPI token", formatter_class=Formatter)
+
+    for subparsers_action in [action for action in PARSER._actions if isinstance(action, argparse._SubParsersAction)]:
+        for choice, subparser in subparsers_action.choices.items():
+            help_lines = subparser.format_help().split("\n")
+            help_lines[0] = "\n\u001b[34;01m" + help_lines[0].replace("usage: ", "")
+            help_lines.pop(1)
+            help_lines[1] = "\u001b[34m" + help_lines[1] + "\u001b[00m"
+            PARSER.epilog = (PARSER.epilog or "") + ("\u001b[00m\n\u001b[36;00m".join(help_lines[0:2]) + "\n" + ("\n  ").join(help_lines[2:]))
+
+    args = PARSER.parse_args()
+
+    if args.debug:
+        setup_logging("DEBUG")
+    else:
+        setup_logging("INFO")
+
+    if args.action == "setup":
+        setup_openai_token()
+        sys.exit(0)
+
+    openai_token = load_openai_token()
+    if openai_token is None:
+        logger.error("OpenAI token not found. Please run `cactus --setup` first.")
+        sys.exit(1)
+    openai.api_key = openai_token
+
+    if args.action == "generate":
+        generate_changes(args)
+    elif args.action == "changelog":
+        generate_changelog(args)
