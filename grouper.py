@@ -146,7 +146,7 @@ def create_rename_hunks(renames):
 def group_hunks(git_diff, n_clusters, affinity_threshold):
     # Parse hunks from the git_diff
     patch_set = PatchSet(git_diff)
-    hunks = [(patched_file, str(hunk)) for patched_file in patch_set for hunk in patched_file]
+    patch_set = PatchSet.from_string(git_diff)
 
     if len(hunks) < 2:
         return {0: hunks}
