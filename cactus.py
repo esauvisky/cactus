@@ -433,6 +433,12 @@ if __name__ == "__main__":
         type=int,
         default=0,
         help="Context size of the git diff (lines before and after each hunk)")
+    PARSER.add_argument(
+        "-m",
+        "--model",
+        action="store",
+        default="gpt-4-1106-preview",
+        help="Model used for the generations",)
     PARSERS = PARSER.add_subparsers(title="subcommands", dest="action")
     GENERATE_PARSER = PARSERS.add_parser(
         "generate",
