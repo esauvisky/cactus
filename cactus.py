@@ -261,7 +261,7 @@ def restore_changes(full_diff):
         f.write("\n")
     run("git apply --cached --unidiff-zero /tmp/cactus.diff")
 
-def generate_changes(args):
+def generate_changes(args, model):
     responses = None
     previous_sha = run("git rev-parse --short HEAD").stdout
 
@@ -368,7 +368,7 @@ def split_into_chunks(text, model="gpt-4-1106-preview"):
     return chunks
 
 
-def generate_changelog(args):
+def generate_changelog(args, model):
     # get list of commit messages from args.sha to HEAD
     commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.split('\n')
 
@@ -478,7 +478,9 @@ if __name__ == "__main__":
         sys.exit(1)
     openai.api_key = openai_token
 
-    if args.action == "generate":
-        generate_changes(args)
+    if args.action == "generate" or (not args.action and "n" not in args):
+        args.n = 0
+        args.affinitty = 0.1
+        generate_changes(args, args.model)
     elif args.action == "changelog":
-        generate_changelog(args)
+        generate_changelog(args, args.model)
