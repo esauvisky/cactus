@@ -206,13 +206,13 @@ def filter_and_sort_similar_strings(strings, similarity_threshold=90):
     return unique_strings
 
 
-def send_request(diff):
+def send_request(diff, model):
     messages = []
     pattern = re.compile(r"^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9_-]+\))?: [a-z].*$",
                          re.IGNORECASE)
     # for ammount, temp, model, single_or_multiple in [(3, 0.6, "gpt-3.5-turbo-16k", "single"), (2, 1.1, "gpt-3.5-turbo-16k", "multiple")]:
     # for ammount, temp, model, single_or_multiple in [(2, 0.95, "gpt-4", "multiple")]:
-    for ammount, temp, model, single_or_multiple in [(1, 0.95, "gpt-4", "single")]:
+    for ammount, temp, model, single_or_multiple in [(1, 0.1, model, "single")]:
     # for ammount, temp, model, single_or_multiple in [(5, 0.1, "gpt-4-1106-preview", "multiple")]:
         response = openai.ChatCompletion.create(
             model=model,
@@ -273,7 +273,7 @@ def generate_changes(args):
     # Now handle renames separately or log them as needed
     renames = []
     if len(renamed):
-        responses = send_request(str(renamed))
+        responses = send_request(str(renamed), model)
         # print(str(renamed))
         clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
         clean_responses = set([r.replace("`", "") for r in clean_responses])
