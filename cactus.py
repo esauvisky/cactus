@@ -65,6 +65,13 @@ Your task is to interpret this data, employing critical thinking and the context
 Approach this task methodically, scrutinizing each change to avoid any inaccuracies. Your meticulous attention to detail will help ensure the accuracy of this changelog. Return your finished changelog IN ITS ENTIRETY as a textual description, one line at a time, beginning with the most recently marked version, down to the preceding release, and ending with the original public production version.
 """
 
+# Models and their respective token limits
+MODEL_TOKEN_LIMITS = {
+    "gpt-3.5-turbo": 4192,
+    "gpt-3.5-turbo-16k": 16384,
+    "gpt-4-1106-preview": 127514,
+    "gpt-4": 16384,
+}
 
 def setup_logging(level="DEBUG", show_module=False):
     """
@@ -278,11 +285,11 @@ def generate_changes(args):
     logger.info(f"Separated into {len(groups)} groups of changes from {sum([len(g) for g in groups.values()])} hunks")
     for n, hunks in enumerate(groups.values(), 1):
         diff = "\n".join([hunk[1] for hunk in hunks])
-        token_count = num_tokens_from_string(diff)
-        if token_count > 16000:
+        token_count = num_tokens_from_string(diff, model)
+        if token_count > MODEL_TOKEN_LIMITS.get(model):
             logger.error(f"This diff is too big, ignoring it")
             continue
-        responses = send_request(diff)
+        responses = send_request(diff, model)
         clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
         clean_responses = set([r.replace("`", "") for r in clean_responses])
         commit_messages = [choice for choice in clean_responses]
@@ -326,41 +333,26 @@ def generate_changes(args):
 
 
 
-def num_tokens_from_string(text, model="gpt-3.5-turbo-16k-0613"):
+def num_tokens_from_string(text, model):
     """Return the number of tokens used by a list of messages."""
     try:
         encoding = tiktoken.encoding_for_model(model)
     except KeyError:
-        print("Warning: model not found. Using cl100k_base encoding.")
-        encoding = tiktoken.get_encoding("cl100k_base")
-    if model in {
-            "gpt-3.5-turbo-0613",
-            "gpt-3.5-turbo-16k-0613",
-            "gpt-4-0314",
-            "gpt-4-32k-0314",
-            "gpt-4-0613",
-            "gpt-4-32k-0613",
-    }:
-        tokens_per_message = 3
-        tokens_per_name = 1
-    elif model == "gpt-3.5-turbo-0301":
-        tokens_per_message = 4 # every message follows <|start|>{role/name}\n{content}<|end|>\n
-        tokens_per_name = -1   # if there's a name, the role is omitted
-    elif "gpt-3.5-turbo" in model:
-        print("Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.")
-        return num_tokens_from_string(text, model="gpt-3.5-turbo-0613")
-    elif "gpt-4" in model:
-        print("Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.")
-        return num_tokens_from_string(text, model="gpt-4-0613")
-    else:
-        raise NotImplementedError(f"num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.")
+        print("Warning: model not found. Using gpt-4-0613 encoding.")
+        model = "gpt-4-0613"
+        encoding = tiktoken.encoding_for_model(model)
+
+    tokens_per_message = 4 # every message follows <|start|>{role/name}\n{content}<|end|>\n
+    tokens_per_name = 1   # if there's a name, the role is omitted
+    # raise NotImplementedError(f"num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.")
     num_tokens = len(encoding.encode(text))
     num_tokens += 3            # every reply is primed with <|start|>assistant<|message|>
     num_tokens += tokens_per_message + tokens_per_name
     return num_tokens
 
 
-def split_into_chunks(text, max_tokens=12288):
+def split_into_chunks(text, model="gpt-4-1106-preview"):
+    max_tokens = MODEL_TOKEN_LIMITS.get(model) - 64  # Default to 128000 if model not found
     """
     Split the text into chunks of the specified size.
     """
@@ -392,18 +384,18 @@ def generate_changelog(args):
         sys.exit(1)
 
     # Split the diff into chunks if it exceeds the token limit
-    chunks = split_into_chunks(diff, 8192 - 64)
+    chunks = split_into_chunks(diff, model)
 
     logger.debug(diff)
 
     if len(chunks) > 1:
-        logger.warning(f"Diff went over max token limit ({num_tokens_from_string(diff)} > 15000). Splitted into {len(chunks)} chunks.")
+        logger.warning(f"Diff went over max token limit ({num_tokens_from_string(diff)} > {MODEL_TOKEN_LIMITS.get(model)}). Splitted into {len(chunks)} chunks.")
 
     changelog = ''
     for chunk in chunks:
         # send request and append result to changelog
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo-16k",
+            model="gpt-4-1106-preview",
             n=1,
             top_p=1,
             temperature=0.2,
