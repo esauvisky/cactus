@@ -39,7 +39,6 @@ def jaccard_similarity(str1, str2):
 
     return len(intersection) / len(union)
 
-
 def get_most_common_words(hunks, n=10):
     word_counts = Counter()
 
