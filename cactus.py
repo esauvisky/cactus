@@ -152,8 +152,8 @@ def get_git_diff(context_size):
     # cmd = f"git --no-pager diff --staged --ignore-space-at-eol --ignore-all-space --ignore-blank-lines --ignore-space-change --inter-hunk-context={context_size} "
     # cmd += f"--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --no-renames --unified={context_size}"
 
-    # cmd += "--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv "
-    cmd = f"git diff --inter-hunk-context={context_size} -U5 --minimal -p --staged"
+    # cmd = f"git diff --staged --inter-hunk-context={context_size} --ignore-submodules --minimal -p" # --no-ext-diff --no-indent-heuristic --no-textconv "
+    cmd = f"git diff --inter-hunk-context={context_size} --minimal -p --staged"
     # cmd += f"--unified=3"
     result = run(cmd)
     if result.returncode != 0:
