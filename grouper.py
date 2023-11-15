@@ -17,6 +17,15 @@ from sklearn.metrics.pairwise import cosine_similarity
 from thefuzz import fuzz
 from unidiff import Hunk, PatchedFile, PatchSet, UnidiffParseError
 
+import re
+from collections import Counter
+
+# List of common programming language reserved words to exclude (example for Python)
+RESERVED_WORDS = set(["def", "import", "from", "as", "if", "else", "return", "class", "self", "for", "in", "try", "except", "with", "while", "break", "continue", "pass", "lambda", "is", "not", "and", "or", "None", "True", "False"])
+
+# List of common English words to exclude
+COMMON_ENGLISH_WORDS = set(["the", "and", "in", "to", "a", "of", "is", "it", "that", "for", "on", "with", "this", "as", "by", "are", "be", "or", "an", "have", "can"])
+
 
 def jaccard_similarity(str1, str2):
     words1 = set(str1.split())
@@ -49,17 +58,18 @@ def get_optimal_n_common_words(hunks, min_n=1, max_n=50):
         most_common_words = get_most_common_words(hunks, n=n)
 
         # Calculate the similarity matrix while ignoring the most common words
-        matrix = similarity_matrix(hunks, type='count', stop_words=most_common_words)
+        stop_words = list(set().union(most_common_words, RESERVED_WORDS, COMMON_ENGLISH_WORDS))
+        matrix = similarity_matrix(hunks, type='count', stop_words=stop_words)
 
         # Calculate the explained variance for the current n
         explained_variance = np.sum(np.var(matrix, axis=0))
         explained_variances.append(explained_variance)
 
     # Plot the explained variance as a function of n
-    # plt.plot(range(min_n, max_n + 1), explained_variances)
-    # plt.xlabel('Number of Most Common Words Ignored')
-    # plt.ylabel('Explained Variance')
-    # plt.show()
+    plt.plot(range(min_n, max_n + 1), explained_variances)
+    plt.xlabel('Number of Most Common Words Ignored')
+    plt.ylabel('Explained Variance')
+    plt.show()
 
     # Find the optimal n using the elbow method
     optimal_n = min_n
