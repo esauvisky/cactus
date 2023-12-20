@@ -129,7 +129,8 @@ def get_modified_lines(hunk):
 
 
 def extract_renames(git_diff):
-    patch_set = PatchSet(git_diff)
+    patch_set = parse_diff(git_diff)
+
     # hunks = [(patched_file, str(hunk)) for patched_file in patch_set for hunk in patched_file]
     renames = []
     clean_diff = []
@@ -141,6 +142,17 @@ def extract_renames(git_diff):
             clean_diff.append(str(patched_file))
 
     return renames, clean_diff
+
+def parse_diff(git_diff):
+    for _ in range(5):
+        try:
+            # Attempt to parse the diff
+            patch_set = PatchSet.from_string(git_diff)
+            break  # Parsing successful, break the loop
+        except UnidiffParseError:
+            # If parsing fails, add a newline and try again
+            git_diff += '\n'
+    return patch_set
 
 
 def create_rename_hunks(renames):
@@ -154,8 +166,15 @@ def create_rename_hunks(renames):
 
 def group_hunks(git_diff, n_clusters, affinity_threshold):
     # Parse hunks from the git_diff
-    patch_set = PatchSet.from_string(git_diff)
+    patch_set = parse_diff(git_diff)
     hunks = [(patched_file, str(hunk)) for patched_file in patch_set for hunk in patched_file]
+
+    # for hunk in hunks:
+    #     print(str(hunk))
+    #     print()
+
+    # import sys
+    # sys.exit(1)
 
     if len(hunks) < 2:
         return {0: hunks}
