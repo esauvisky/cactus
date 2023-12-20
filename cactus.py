@@ -485,10 +485,19 @@ if __name__ == "__main__":
         sys.exit(1)
     openai.api_key = openai_token
 
-    if args.action == "generate" or not args.action:
+    if isinstance(args.action, int):
+        args.n = args.action
+        args.action = "generate"
+    elif not args.action:
+        args.action = "generate"
+
+    if args.action == "generate":
+        if "affinitty" not in args or 0 <= args.affinitty < 1:
+            args.affinitty = 0.1
         if "n" not in args:
             args.n = 0
-        args.affinitty = 0.1
+
+        logger.success(f"Generating {args.action} commit messages with context size {args.context_size} and affinity {args.affinitty}.")
         generate_changes(args, args.model)
     elif args.action == "changelog":
         generate_changelog(args, args.model)
