@@ -432,7 +432,7 @@ if __name__ == "__main__":
         "--context-size",
         nargs="?",
         type=int,
-        default=0,
+        default=2,
         help="Context size of the git diff (lines before and after each hunk)")
     PARSER.add_argument(
         "-m",
