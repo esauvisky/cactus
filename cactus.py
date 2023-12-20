@@ -267,6 +267,7 @@ def generate_changes(args, model):
 
     full_diff = get_git_diff(args.context_size)
     renamed, clean_diff = extract_renames(full_diff)
+
     groups = group_hunks("\n".join(clean_diff), args.n, args.affinitty)
 
 
