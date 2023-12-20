@@ -361,7 +361,7 @@ def split_into_chunks(text, model="gpt-4-1106-preview"):
     chunks = []
     chunk = ''
     for token in tokens:
-        if num_tokens_from_string(chunk + '\n' + token) > max_tokens:
+        if num_tokens_from_string(chunk + '\n' + token, model) > max_tokens:
             chunks.append(chunk)
             chunk = ''
         chunk += '\n' + token
@@ -398,10 +398,10 @@ def generate_changelog(args, model):
         response = openai.ChatCompletion.create(
             model="gpt-4-1106-preview",
             n=1,
-            top_p=1,
-            temperature=0.2,
+            top_p=0.8,
+            temperature=0.8,
             stop=None,
-            max_tokens=200,
+            max_tokens=1000,
             messages=[
                 {
                     "role": "system",
@@ -485,8 +485,9 @@ if __name__ == "__main__":
         sys.exit(1)
     openai.api_key = openai_token
 
-    if args.action == "generate" or (not args.action and "n" not in args):
-        args.n = 0
+    if args.action == "generate" or not args.action:
+        if "n" not in args:
+            args.n = 0
         args.affinitty = 0.1
         generate_changes(args, args.model)
     elif args.action == "changelog":

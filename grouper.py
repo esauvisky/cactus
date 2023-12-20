@@ -64,11 +64,11 @@ def get_optimal_n_common_words(hunks, min_n=1, max_n=50):
         explained_variance = np.sum(np.var(matrix, axis=0))
         explained_variances.append(explained_variance)
 
-    # Plot the explained variance as a function of n
-    plt.plot(range(min_n, max_n + 1), explained_variances)
-    plt.xlabel('Number of Most Common Words Ignored')
-    plt.ylabel('Explained Variance')
-    plt.show()
+    ## Plot the explained variance as a function of n
+    # plt.plot(range(min_n, max_n + 1), explained_variances)
+    # plt.xlabel('Number of Most Common Words Ignored')
+    # plt.ylabel('Explained Variance')
+    # plt.show()
 
     # Find the optimal n using the elbow method
     optimal_n = min_n
