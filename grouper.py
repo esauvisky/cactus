@@ -247,10 +247,10 @@ def stage_renames(renames):
             # No need to join on patch_info since it's a string already included in the hunk data
             filename = fd.name
 
-        for patched_file, hunk in rename:
+        for hunk in rename:
             with open(filename, 'a') as fd:
-                fd.write(f"--- {patched_file.source_file}\n")
-                fd.write(f"+++ {patched_file.target_file}\n")
+                # fd.write(f"--- {patched_file.source_file}\n")
+                # fd.write(f"+++ {patched_file.target_file}\n")
                 fd.write(str(hunk))
                 fd.write("\n")
 
@@ -269,10 +269,10 @@ def stage_changes(hunks):
         # No need to join on patch_info since it's a string already included in the hunk data
         filename = fd.name
 
-    for patched_file, hunk in hunks:
+    for hunk in hunks:
         with open(filename, 'a') as fd:
-            fd.write(f"--- {patched_file.source_file}\n")
-            fd.write(f"+++ {patched_file.target_file}\n")
+            # fd.write(f"--- {patched_file.source_file}\n")
+            # fd.write(f"+++ {patched_file.target_file}\n")
             fd.write(str(hunk))
             fd.write("\n")
 

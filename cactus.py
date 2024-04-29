@@ -11,6 +11,9 @@ import os
 import pprint
 import time
 
+from pprint import pprint
+import json
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import re
 import subprocess
@@ -22,12 +25,17 @@ from loguru import logger
 from thefuzz import fuzz
 import tiktoken
 
-from grouper import group_hunks, stage_changes, extract_renames
+from grouper import group_hunks, parse_diff, stage_changes, extract_renames
 
 SIMILARITY_THRESHOLD = 70
 
-PROMPT_MULTIPLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a list of 5 distinct commit messages that summarize all the changes made in a single message. I will use the Conventional Commits guidelines as a reference, but prioritize creating messages that encompass all changes. The generated commit messages will be ordered from best to worst."""
-PROMPT_MULTIPLE_START = """Analyze the following diff and generate a list of 5 commit messages, each summarizing all the changes made. Use the Conventional Commits guidelines as a reference but prioritize encompassing all changes in one message. Provide the commit messages as a descending-ordered list from best to worst, and nothing else.
+PROMPT_CLASSIFICATOR_SYSTEM = """As a highly skilled AI, you will analyze the list of provided code diffs and return a JSON containing a list of lists of indexes of the hunks that are likely to be related and belong to the same commit. Each hunk will be represented by an index in the input diff. You will cluster the hunks based on their similarity and relationship in the best way possible. For example, if a hunk is related to the same feature or implementation of another hunk, it will be included in the same cluster. If the user provides a number of total clusters, you will split the hunks enough to fit the number of clusters, if he doesn't, use your best judgment to come up with a decent number of commits. The JSON will be formatted as the following example:
+[[0, 1, 5], [4], [3, 2, 6, 7, 8], ...]
+Return the JSON only, no other text.
+"""
+
+PROMPT_MULTIPLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a list of 5 distinct commit messages that summarize all the changes made in a single message. I will use the Conventional Commits guidelines as a reference, but prioritize creating messages that encompass all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. The generated commit messages will be ordered from best to worst."""
+PROMPT_MULTIPLE_START = """Analyze the following diff and generate a list of 5 commit messages, each summarizing all the changes made. Use the Conventional Commits guidelines as a reference but prioritize encompassing all changes in one message. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. Provide the commit messages as a descending-ordered list from best to worst, and nothing else.
 
 Conventional Commits guidelines:
 1. Commit messages should start with a type (e.g., feat, fix, chore, docs).
@@ -47,7 +55,7 @@ Best to Worst Commit Messages:
 3.
 4.
 5."""
-PROMPT_SINGLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a single commit message that summarizes all the changes made. I will use the Conventional Commits guidelines as a reference, but prioritize creating a message that encompasses all changes. Return only the commit message and absolutely nothing else. No special characters or newlines should be provided."""
+PROMPT_SINGLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a single commit message that summarizes all the changes made. I will use the Conventional Commits guidelines as a reference, but prioritize creating a message that encompasses all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. Return only the commit message and absolutely nothing else. No special characters or newlines should be provided."""
 PROMPT_SINGLE_START = """Please generate a single commit message that describes all the changes made in the following diff, using the Conventional Commits guidelines as a reference:
 
 --- Begin diff ---
@@ -72,6 +80,7 @@ MODEL_TOKEN_LIMITS = {
     "gpt-4-1106-preview": 127514,
     "gpt-4": 16384,
 }
+
 
 def setup_logging(level="DEBUG", show_module=False):
     """
@@ -168,6 +177,10 @@ def fix_message(message):
     pattern_no_period = "\.$"
     pattern_first_letter = "^[a-zA-Z]+\([a-zA-Z]+\): ([A-Z])"
     pattern_numeric_prefix = "^\d+\s*[-.:\)]\s*"
+    pattern_codeblock = "```.*"
+
+    # Remove code blocks
+    message = re.sub(pattern_codeblock, "", message)
 
     # Remove numeric prefixes
     message = re.sub(pattern_numeric_prefix, "", message)
@@ -206,6 +219,37 @@ def filter_and_sort_similar_strings(strings, similarity_threshold=90):
     return unique_strings
 
 
+def get_groups(hunks, clusters_n, model):
+    messages = []
+    logger.debug(f"hunks: {hunks}")
+    response = openai.ChatCompletion.create(
+        model=model,
+        top_p=1,
+        temperature=0.2,
+        stop=None,
+        max_tokens=2048,
+        messages=[
+            {
+                "role": "system",
+                "content": PROMPT_CLASSIFICATOR_SYSTEM
+            },
+            {
+                "role": "user",
+                "content": hunks + (f"\n\nSplit the hunks below into {clusters_n} clusters and return the JSON." if clusters_n else "")
+            },
+        ],
+    )
+    logger.debug(f"response: {response}")
+    content = fix_message(response.choices[0].message.content)
+    logger.debug(f"content: {content.splitlines()}")
+    # parse the content to get the list of indexes of the hunks that are likely to be related to the same change
+    result = json.loads(content)
+    logger.debug(f"groups: {result}")
+    result = [hunks for hunks in result]
+
+    return result
+
+
 def send_request(diff, model):
     messages = []
     pattern = re.compile(r"^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9_-]+\))?: [a-z].*$",
@@ -213,7 +257,7 @@ def send_request(diff, model):
     # for ammount, temp, model, single_or_multiple in [(3, 0.6, "gpt-3.5-turbo-16k", "single"), (2, 1.1, "gpt-3.5-turbo-16k", "multiple")]:
     # for ammount, temp, model, single_or_multiple in [(2, 0.95, "gpt-4", "multiple")]:
     for ammount, temp, model, single_or_multiple in [(1, 0.1, model, "single")]:
-    # for ammount, temp, model, single_or_multiple in [(5, 0.1, "gpt-4-1106-preview", "multiple")]:
+        # for ammount, temp, model, single_or_multiple in [(5, 0.1, "gpt-4-1106-preview", "multiple")]:
         response = openai.ChatCompletion.create(
             model=model,
             n=ammount,
@@ -261,15 +305,33 @@ def restore_changes(full_diff):
         f.write("\n")
     run("git apply --cached --unidiff-zero /tmp/cactus.diff")
 
+
 def generate_changes(args, model):
     responses = None
     previous_sha = run("git rev-parse --short HEAD").stdout
 
     full_diff = get_git_diff(args.context_size)
     renamed, clean_diff = extract_renames(full_diff)
+    patch_set = parse_diff("\n".join(clean_diff))
 
-    groups = group_hunks("\n".join(clean_diff), args.n, args.affinitty)
+    # groups = group_hunks("\n".join(clean_diff), args.n, args.affinitty)
 
+    i = 0
+    hunks = ""
+    all_hunks = []
+    for patched_file in patch_set:
+        for hunk in patched_file:
+            newhunk = f"--- {patched_file.source_file}\n"
+            newhunk += f"+++ {patched_file.target_file}\n"
+            newhunk += str(hunk)
+            all_hunks.append(newhunk)
+            hunks += f"\n==== Hunk {i} ({patched_file.path}) ====\n" + str(hunk)
+            i += 1
+    clusters = get_groups(hunks, args.n, model)
+    groups = {}
+    for k, v in enumerate(clusters, start=0):
+        groups[k] = [all_hunks[s] for s in v if len(v) > 0]
+        # print(f"Group {k}: {v}")
 
     # Now handle renames separately or log them as needed
     renames = []
@@ -285,7 +347,7 @@ def generate_changes(args, model):
     patches = []
     logger.info(f"Separated into {len(groups)} groups of changes from {sum([len(g) for g in groups.values()])} hunks")
     for n, hunks in enumerate(groups.values(), 1):
-        diff = "\n".join([hunk[1] for hunk in hunks])
+        diff = "\n".join([str(hunk) for hunk in hunks])
         token_count = num_tokens_from_string(diff, model)
         if token_count > MODEL_TOKEN_LIMITS.get(model):
             logger.error(f"This diff is too big, ignoring it")
@@ -309,7 +371,8 @@ def generate_changes(args, model):
     # Handle renames first
     try:
         for hunks, commit_messages in patches:
-            diff = "\n".join([hunk[1] for hunk in hunks])
+            diff = "\n".join([str(hunk) for hunk in hunks])
+            logger.info(f"diff: {diff}\ncommit_messages: {commit_messages}")
             stage_changes(hunks)
 
             # Check if there is only one commit message option
@@ -333,7 +396,6 @@ def generate_changes(args, model):
         restore_changes(full_diff)
 
 
-
 def num_tokens_from_string(text, model):
     """Return the number of tokens used by a list of messages."""
     try:
@@ -344,16 +406,16 @@ def num_tokens_from_string(text, model):
         encoding = tiktoken.encoding_for_model(model)
 
     tokens_per_message = 4 # every message follows <|start|>{role/name}\n{content}<|end|>\n
-    tokens_per_name = 1   # if there's a name, the role is omitted
-    # raise NotImplementedError(f"num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.")
+    tokens_per_name = 1    # if there's a name, the role is omitted
+                           # raise NotImplementedError(f"num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.")
     num_tokens = len(encoding.encode(text))
-    num_tokens += 3            # every reply is primed with <|start|>assistant<|message|>
+    num_tokens += 3        # every reply is primed with <|start|>assistant<|message|>
     num_tokens += tokens_per_message + tokens_per_name
     return num_tokens
 
 
 def split_into_chunks(text, model="gpt-4-1106-preview"):
-    max_tokens = MODEL_TOKEN_LIMITS.get(model) - 64  # Default to 128000 if model not found
+    max_tokens = MODEL_TOKEN_LIMITS.get(model) - 64 # Default to 128000 if model not found
     """
     Split the text into chunks of the specified size.
     """
@@ -410,7 +472,7 @@ def generate_changelog(args, model):
                 {
                     "role": "user",
                     "content": PROMPT_CHANGELOG + f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n"
-                    # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
+                                                                                                                                                                                              # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
                 },
             ],
         )
@@ -435,11 +497,14 @@ if __name__ == "__main__":
         default=2,
         help="Context size of the git diff (lines before and after each hunk)")
     PARSER.add_argument(
+        "-a", "--affinitty", type=float, default=0.1, help="Affinity of the model (lower is more commits)")
+    PARSER.add_argument(
         "-m",
         "--model",
         action="store",
         default="gpt-4-1106-preview",
-        help="Model used for the generations",)
+        help="Model used for the generations",
+    )
     PARSERS = PARSER.add_subparsers(title="subcommands", dest="action")
     GENERATE_PARSER = PARSERS.add_parser(
         "generate",
@@ -447,8 +512,6 @@ if __name__ == "__main__":
         add_help=False,
         help="Generates commit messages for all the currently staged changes")
     GENERATE_PARSER.add_argument("n", nargs="?", type=int, default=0, help="Number of separate commits to generate")
-    GENERATE_PARSER.add_argument(
-        "-a", "--affinitty", type=float, default=0.1, help="Affinity of the model (lower is more commits)")
     CHANGELOG_PARSER = PARSERS.add_parser(
         "changelog",
         formatter_class=Formatter,
@@ -470,10 +533,10 @@ if __name__ == "__main__":
 
     args = PARSER.parse_args()
 
-    if args.debug:
-        setup_logging("DEBUG")
-    else:
-        setup_logging("INFO")
+    # if args.debug:
+    setup_logging("DEBUG")
+    # else:
+    #     setup_logging("INFO")
 
     if args.action == "setup":
         setup_openai_token()
@@ -492,7 +555,7 @@ if __name__ == "__main__":
         args.action = "generate"
 
     if args.action == "generate":
-        if "affinitty" not in args or 0 <= args.affinitty < 1:
+        if "affinitty" not in args or not 0 <= args.affinitty < 1:
             args.affinitty = 0.1
         if "n" not in args:
             args.n = 0
