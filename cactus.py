@@ -29,9 +29,12 @@ from grouper import group_hunks, parse_diff, stage_changes, extract_renames
 
 SIMILARITY_THRESHOLD = 70
 
-PROMPT_CLASSIFICATOR_SYSTEM = """As a highly skilled AI, you will analyze the list of provided code diffs and return a JSON containing a list of lists of indexes of the hunks that are likely to be related and belong to the same commit. Each hunk will be represented by an index in the input diff. You will cluster the hunks based on their similarity and relationship in the best way possible. For example, if a hunk is related to the same feature or implementation of another hunk, it will be included in the same cluster. If the user provides a number of total clusters, you will split the hunks enough to fit the number of clusters, if he doesn't, use your best judgment to come up with a decent number of commits. The JSON will be formatted as the following example:
+PROMPT_CLASSIFICATOR_SYSTEM = """As a highly skilled AI, you will analyze the list of provided code diffs and return a JSON containing a list of lists of indexes of the hunks that are likely to be related and belong to the same commit. Each hunk will be represented by an index in the input diff. You will cluster the hunks based on their similarity and relationship in the best way possible. For example, if a hunk is related to the same feature or implementation of another hunk, it will be included in the same cluster. If the user provides a number of total clusters, you will split the hunks enough to fit the number of clusters, if he doesn't, use your best judgment to come up with a decent number of commits. Your response, i.e., the JSON, must be formatted as the following example, inside a codeblock:
+```json
 [[0, 1, 5], [4], [3, 2, 6, 7, 8], ...]
-Return the JSON only, no other text.
+```
+Do not leave clusters empty. Return the JSON only, no other text.
+Avoid too many clusters with too few hunks each.
 """
 
 PROMPT_MULTIPLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a list of 5 distinct commit messages that summarize all the changes made in a single message. I will use the Conventional Commits guidelines as a reference, but prioritize creating messages that encompass all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. The generated commit messages will be ordered from best to worst."""
@@ -55,8 +58,8 @@ Best to Worst Commit Messages:
 3.
 4.
 5."""
-PROMPT_SINGLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a single commit message that summarizes all the changes made. I will use the Conventional Commits guidelines as a reference, but prioritize creating a message that encompasses all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. Return only the commit message and absolutely nothing else. No special characters or newlines should be provided."""
-PROMPT_SINGLE_START = """Please generate a single commit message that describes all the changes made in the following diff, using the Conventional Commits guidelines as a reference:
+PROMPT_SINGLE_SYSTEM = """As a highly skilled AI, you will analyze the provided code diff and generate a single commit message that summarizes all the changes made. You will use the Conventional Commits guidelines as a reference, but prioritize creating a message that encompasses all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. Return only the commit message and absolutely nothing else. No special characters or newlines should be provided."""
+PROMPT_SINGLE_START = """Please generate a single commit message that describes all the changes made in the following diff:
 
 --- Begin diff ---
 """
@@ -225,9 +228,9 @@ def get_groups(hunks, clusters_n, model):
     response = openai.ChatCompletion.create(
         model=model,
         top_p=1,
-        temperature=0.2,
+        temperature=1,
         stop=None,
-        max_tokens=2048,
+        max_tokens=512,
         messages=[
             {
                 "role": "system",
@@ -235,7 +238,7 @@ def get_groups(hunks, clusters_n, model):
             },
             {
                 "role": "user",
-                "content": hunks + (f"\n\nSplit the hunks below into {clusters_n} clusters and return the JSON." if clusters_n else "")
+                "content": hunks + (f"\n\nSplit the hunks above into {clusters_n} clusters and return the JSON." if clusters_n else "\n\nSplit the hunks above into clusters and return the JSON.")
             },
         ],
     )
@@ -264,7 +267,7 @@ def send_request(diff, model):
             top_p=1,
             temperature=temp,
             stop=None if single_or_multiple == "multiple" else ["\n"],
-            max_tokens=100,
+            max_tokens=1024,
             messages=[
                 {
                     "role": "system",
@@ -558,7 +561,7 @@ if __name__ == "__main__":
         if "affinitty" not in args or not 0 <= args.affinitty < 1:
             args.affinitty = 0.1
         if "n" not in args:
-            args.n = 0
+            args.n = None
 
         logger.success(f"Generating {args.action} commit messages with context size {args.context_size} and affinity {args.affinitty}.")
         generate_changes(args, args.model)
