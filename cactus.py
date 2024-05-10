@@ -536,10 +536,8 @@ if __name__ == "__main__":
 
     args = PARSER.parse_args()
 
-    # if args.debug:
-    setup_logging("DEBUG")
-    # else:
-    #     setup_logging("INFO")
+    setup_logging("INFO")
+    # setup_logging("DEBUG")
 
     if args.action == "setup":
         setup_openai_token()
