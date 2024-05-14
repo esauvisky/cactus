@@ -245,13 +245,12 @@ def filter_and_sort_similar_strings(strings, similarity_threshold=90):
 
 
 def get_groups(hunks, clusters_n, model):
-    messages = []
     logger.debug(f"hunks: {hunks}")
-    response = client.chat.completions.create(model=model,
+    response = client.chat.completions.create(model=model, # type: ignore
     top_p=1,
     temperature=1,
-    stop=None,
     max_tokens=512,
+    response_format={"type": "json_object"},
     messages=[
         {
             "role": "system",
@@ -263,13 +262,9 @@ def get_groups(hunks, clusters_n, model):
         },
     ])
     logger.debug(f"response: {response}")
-    content = fix_message(response.choices[0].message.content)
-    logger.debug(f"content: {content.splitlines()}")
-    # parse the content to get the list of indexes of the hunks that are likely to be related to the same change
-    result = json.loads(content)
+    content = json.loads(response.choices[0].message.content) # type: ignore
+    result = content["hunks"]
     logger.debug(f"groups: {result}")
-    result = [hunks for hunks in result]
-
     return result
 
 
