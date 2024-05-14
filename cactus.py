@@ -19,7 +19,9 @@ import re
 import subprocess
 import sys
 
-import openai
+from openai import OpenAI
+client = None
+
 import pick
 from loguru import logger
 from thefuzz import fuzz
@@ -225,23 +227,21 @@ def filter_and_sort_similar_strings(strings, similarity_threshold=90):
 def get_groups(hunks, clusters_n, model):
     messages = []
     logger.debug(f"hunks: {hunks}")
-    response = openai.ChatCompletion.create(
-        model=model,
-        top_p=1,
-        temperature=1,
-        stop=None,
-        max_tokens=512,
-        messages=[
-            {
-                "role": "system",
-                "content": PROMPT_CLASSIFICATOR_SYSTEM
-            },
-            {
-                "role": "user",
-                "content": hunks + (f"\n\nSplit the hunks above into {clusters_n} clusters and return the JSON." if clusters_n else "\n\nSplit the hunks above into clusters and return the JSON.")
-            },
-        ],
-    )
+    response = client.chat.completions.create(model=model,
+    top_p=1,
+    temperature=1,
+    stop=None,
+    max_tokens=512,
+    messages=[
+        {
+            "role": "system",
+            "content": PROMPT_CLASSIFICATOR_SYSTEM
+        },
+        {
+            "role": "user",
+            "content": hunks + (f"\n\nSplit the hunks above into {clusters_n} clusters and return the JSON." if clusters_n else "\n\nSplit the hunks above into clusters and return the JSON.")
+        },
+    ])
     logger.debug(f"response: {response}")
     content = fix_message(response.choices[0].message.content)
     logger.debug(f"content: {content.splitlines()}")
@@ -260,26 +260,24 @@ def send_request(diff, model):
     # for ammount, temp, model, single_or_multiple in [(3, 0.6, "gpt-3.5-turbo-16k", "single"), (2, 1.1, "gpt-3.5-turbo-16k", "multiple")]:
     # for ammount, temp, model, single_or_multiple in [(2, 0.95, "gpt-4", "multiple")]:
     for ammount, temp, model, single_or_multiple in [(1, 0.1, model, "single")]:
-        # for ammount, temp, model, single_or_multiple in [(5, 0.1, "gpt-4-1106-preview", "multiple")]:
-        response = openai.ChatCompletion.create(
-            model=model,
-            n=ammount,
-            top_p=1,
-            temperature=temp,
-            stop=None if single_or_multiple == "multiple" else ["\n"],
-            max_tokens=1024,
-            messages=[
-                {
-                    "role": "system",
-                    "content": PROMPT_SINGLE_SYSTEM if single_or_multiple == "single" else PROMPT_MULTIPLE_SYSTEM
-                },
-                {
-                    "role": "user",
-                    "content": PROMPT_SINGLE_START + diff + PROMPT_SINGLE_END
-                               if single_or_multiple == "single" else PROMPT_MULTIPLE_START + diff + PROMPT_MULTIPLE_END
-                },
-            ],
-        )
+        # for ammount, temp, model, single_or_multiple in [(5, 0.1, "gpt-4o", "multiple")]:
+        response = client.chat.completions.create(model=model,
+        n=ammount,
+        top_p=1,
+        temperature=temp,
+        stop=None if single_or_multiple == "multiple" else ["\n"],
+        max_tokens=1024,
+        messages=[
+            {
+                "role": "system",
+                "content": PROMPT_SINGLE_SYSTEM if single_or_multiple == "single" else PROMPT_MULTIPLE_SYSTEM
+            },
+            {
+                "role": "user",
+                "content": PROMPT_SINGLE_START + diff + PROMPT_SINGLE_END
+                           if single_or_multiple == "single" else PROMPT_MULTIPLE_START + diff + PROMPT_MULTIPLE_END
+            },
+        ])
 
         # Fix some common issues
         for choice in response.choices:
@@ -460,25 +458,23 @@ def generate_changelog(args, model):
     changelog = ''
     for chunk in chunks:
         # send request and append result to changelog
-        response = openai.ChatCompletion.create(
-            model="gpt-4-1106-preview",
-            n=1,
-            top_p=0.8,
-            temperature=0.8,
-            stop=None,
-            max_tokens=1000,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "As a highly skilled AI, you will provide me with a properly formatted changelog targeting the final user, in a list form using Markdown, and nothing else."
-                },
-                {
-                    "role": "user",
-                    "content": PROMPT_CHANGELOG + f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n"
-                                                                                                                                                                                              # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
-                },
-            ],
-        )
+        response = client.chat.completions.create(model="gpt-4o",
+        n=1,
+        top_p=0.8,
+        temperature=0.8,
+        stop=None,
+        max_tokens=1000,
+        messages=[
+            {
+                "role": "system",
+                "content": "As a highly skilled AI, you will provide me with a properly formatted changelog targeting the final user, in a list form using Markdown, and nothing else."
+            },
+            {
+                "role": "user",
+                "content": PROMPT_CHANGELOG + f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n"
+                                                                                                                                                                                          # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
+            },
+        ])
         changelog += response.choices[0].message.content
 
     logger.debug(pprint.pformat(response))
@@ -547,8 +543,8 @@ if __name__ == "__main__":
     if openai_token is None:
         logger.error("OpenAI token not found. Please run `cactus --setup` first.")
         sys.exit(1)
-    openai.api_key = openai_token
 
+    client = OpenAI(api_key=openai_token)
     if isinstance(args.action, int):
         args.n = args.action
         args.action = "generate"
