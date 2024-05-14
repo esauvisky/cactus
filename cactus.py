@@ -83,6 +83,7 @@ MODEL_TOKEN_LIMITS = {
     "gpt-3.5-turbo": 4192,
     "gpt-3.5-turbo-16k": 16384,
     "gpt-4-1106-preview": 127514,
+    "gpt-4o": 127514,
     "gpt-4": 16384,
 }
 
@@ -415,7 +416,7 @@ def num_tokens_from_string(text, model):
     return num_tokens
 
 
-def split_into_chunks(text, model="gpt-4-1106-preview"):
+def split_into_chunks(text, model="gpt-4o"):
     max_tokens = MODEL_TOKEN_LIMITS.get(model) - 64 # Default to 128000 if model not found
     """
     Split the text into chunks of the specified size.
@@ -501,7 +502,7 @@ if __name__ == "__main__":
         "-m",
         "--model",
         action="store",
-        default="gpt-4-1106-preview",
+        default="gpt-4o",
         help="Model used for the generations",
     )
     PARSERS = PARSER.add_subparsers(title="subcommands", dest="action")
