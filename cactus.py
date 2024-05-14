@@ -276,12 +276,12 @@ def send_request(diff, model):
     # for ammount, temp, model, single_or_multiple in [(2, 0.95, "gpt-4", "multiple")]:
     for ammount, temp, model, single_or_multiple in [(1, 0.1, model, "single")]:
         # for ammount, temp, model, single_or_multiple in [(5, 0.1, "gpt-4o", "multiple")]:
-        response = client.chat.completions.create(model=model,
+        response = client.chat.completions.create(model=model, # type: ignore
         n=ammount,
         top_p=1,
         temperature=temp,
-        stop=None if single_or_multiple == "multiple" else ["\n"],
         max_tokens=1024,
+        response_format={"type": "json_object"},
         messages=[
             {
                 "role": "system",
@@ -296,13 +296,12 @@ def send_request(diff, model):
 
         # Fix some common issues
         for choice in response.choices:
-            content = choice.message.content
-            logger.debug(f"am: {ammount}, temp: {temp}, model: {model}, single_or_multiple: {single_or_multiple}, content: {content.splitlines()}")
-            lines = content.splitlines()
+            content = json.loads(choice.message.content)
+            logger.debug(f"am: {ammount}, temp: {temp}, model: {model}, single_or_multiple: {single_or_multiple}, content: {content}")
             if single_or_multiple == "multiple":
-                lines = content.splitlines()[:-1]
-            for _message in lines:
-                messages.append(_message)
+                messages = content["messages"]
+            else:
+                messages = [content["message"]]
 
     # Filter out similar commit messages
     fixed_messages = []
