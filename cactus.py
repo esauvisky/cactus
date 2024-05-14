@@ -33,14 +33,21 @@ SIMILARITY_THRESHOLD = 70
 
 PROMPT_CLASSIFICATOR_SYSTEM = """As a highly skilled AI, you will analyze the list of provided code diffs and return a JSON containing a list of lists of indexes of the hunks that are likely to be related and belong to the same commit. Each hunk will be represented by an index in the input diff. You will cluster the hunks based on their similarity and relationship in the best way possible. For example, if a hunk is related to the same feature or implementation of another hunk, it will be included in the same cluster. If the user provides a number of total clusters, you will split the hunks enough to fit the number of clusters, if he doesn't, use your best judgment to come up with a decent number of commits. Your response, i.e., the JSON, must be formatted as the following example, inside a codeblock:
 ```json
-[[0, 1, 5], [4], [3, 2, 6, 7, 8], ...]
+{
+    "hunks": [
+        [0, 1, 5],
+        [4],
+        [3, 2, 6, 7, 8],
+        ...
+    ]
+}
 ```
 Do not leave clusters empty. Return the JSON only, no other text.
 Avoid too many clusters with too few hunks each.
 """
 
 PROMPT_MULTIPLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a list of 5 distinct commit messages that summarize all the changes made in a single message. I will use the Conventional Commits guidelines as a reference, but prioritize creating messages that encompass all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. The generated commit messages will be ordered from best to worst."""
-PROMPT_MULTIPLE_START = """Analyze the following diff and generate a list of 5 commit messages, each summarizing all the changes made. Use the Conventional Commits guidelines as a reference but prioritize encompassing all changes in one message. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. Provide the commit messages as a descending-ordered list from best to worst, and nothing else.
+PROMPT_MULTIPLE_START = """Analyze the following diff and generate a list of 5 commit messages, each summarizing all the changes made. Use the Conventional Commits guidelines as a reference but prioritize encompassing all changes in one message. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc.
 
 Conventional Commits guidelines:
 1. Commit messages should start with a type (e.g., feat, fix, chore, docs).
@@ -54,22 +61,34 @@ Conventional Commits guidelines:
 PROMPT_MULTIPLE_END = """
 --- End diff ---
 
-Best to Worst Commit Messages:
-1.
-2.
-3.
-4.
-5."""
-PROMPT_SINGLE_SYSTEM = """As a highly skilled AI, you will analyze the provided code diff and generate a single commit message that summarizes all the changes made. You will use the Conventional Commits guidelines as a reference, but prioritize creating a message that encompasses all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. Return only the commit message and absolutely nothing else. No special characters or newlines should be provided."""
-PROMPT_SINGLE_START = """Please generate a single commit message that describes all the changes made in the following diff:
+Provide the commit messages as a descending-ordered list from best to worst, inside a JSON object like in the example below:
+
+{
+    "messages": [
+        "feat: Added a new feature",
+        "fix: Fixed a bug",
+        "chore: Updated the codebase",
+        "docs: Updated the documentation",
+        "refactor: Refactored the code",
+    ]
+}
+"""
+
+PROMPT_SINGLE_SYSTEM = """As a highly skilled AI, you will analyze the provided code diff and generate a single commit message that summarizes all the changes made. You will use the Conventional Commits guidelines as a reference, but prioritize creating a message that encompasses all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. Return only the commit message inside a JSON object and absolutely nothing else, like in the example below:
+
+{
+    "message": "feat: Added a new feature"
+}
+
+No special characters or newlines should be provided."""
+PROMPT_SINGLE_START = """Please generate a commit message that describes all the changes made in the following diff:
 
 --- Begin diff ---
 """
 
 PROMPT_SINGLE_END = """
 --- End diff ---
-
-Commit Message: """
+"""
 
 PROMPT_CHANGELOG = """Examine the following compilation git diffs, which capture all modifications made between the most recent development version of our software and the currently released, public, production version.
 
