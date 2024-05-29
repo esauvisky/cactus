@@ -187,7 +187,7 @@ def get_git_diff(context_size):
     # cmd += f"--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --no-renames --unified={context_size}"
 
     # cmd = f"git diff --staged --inter-hunk-context={context_size} --ignore-submodules --minimal -p" # --no-ext-diff --no-indent-heuristic --no-textconv "
-    cmd = f"git diff --inter-hunk-context={context_size} --minimal -p --staged"
+    cmd = f"git diff --inter-hunk-context={context_size} --unified={context_size} --minimal -p --staged"
     # cmd += f"--unified=3"
     result = run(cmd)
     if result.returncode != 0:
@@ -326,8 +326,8 @@ def generate_changes(args, model):
     previous_sha = run("git rev-parse --short HEAD").stdout
 
     full_diff = get_git_diff(args.context_size)
-    renamed, clean_diff = extract_renames(full_diff)
-    patch_set = parse_diff("\n".join(clean_diff))
+    # renamed, clean_diff = extract_renames(full_diff)
+    patch_set = parse_diff(full_diff)
 
     # groups = group_hunks("\n".join(clean_diff), args.n, args.affinitty)
 
@@ -350,14 +350,14 @@ def generate_changes(args, model):
 
     # Now handle renames separately or log them as needed
     renames = []
-    if len(renamed):
-        responses = send_request(str(renamed), model)
-        # print(str(renamed))
-        clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
-        clean_responses = set([r.replace("`", "") for r in clean_responses])
-        commit_messages = [choice for choice in clean_responses]
-        logger.info(f"Generated commit messages for renames: {commit_messages}")
-        renames.append((renamed, commit_messages))
+    # if len(renamed):
+    #     responses = send_request(str(renamed), model)
+    #     # print(str(renamed))
+    #     clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
+    #     clean_responses = set([r.replace("`", "") for r in clean_responses])
+    #     commit_messages = [choice for choice in clean_responses]
+    #     logger.info(f"Generated commit messages for renames: {commit_messages}")
+    #     renames.append((renamed, commit_messages))
 
     patches = []
     logger.info(f"Separated into {len(groups)} groups of changes from {sum([len(g) for g in groups.values()])} hunks")
@@ -374,7 +374,7 @@ def generate_changes(args, model):
         logger.info(f"Generated commit messages for group {n} with {len(hunks)} hunks: {commit_messages}")
         patches.append((hunks, commit_messages))
 
-    patches.extend(renames)
+    # patches.extend(renames)
     logger.debug(f"Generated {len(patches)} commits for {len(groups)} groups (sizes: {', '.join([str(len(g)) for g in groups.values()])})")
 
     # unstage all staged changes
