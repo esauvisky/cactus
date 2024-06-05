@@ -124,10 +124,16 @@ def get_patches_and_prompt(diff_to_apply):
     prompt_data = {"files": {}, "hunks": []}
 
     for patched_file in patch_set:
-        file_contents = open(patched_file.path, "r").read()
-        prompt_data["files"][patched_file.path] = {
-            "content": file_contents
-        }
+        try:
+            file_contents = open(patched_file.path, "r").read()
+            prompt_data["files"][patched_file.path] = {
+                "content": file_contents
+            }
+        except UnicodeDecodeError:
+            logger.warning(f"Failed to read file {patched_file.path}. This is probably a binary file.")
+            prompt_data["files"][patched_file.path] = {
+                "content": "[BINARY FILE]"
+            }
 
         for hunk in patched_file:
             prompt_data["hunks"].append({
