@@ -340,16 +340,19 @@ def generate_changes(args, model):
     responses = None
     previous_sha = run("git rev-parse --short HEAD").stdout
 
-    full_diff = get_git_diff(args.context_size)
+    diff_to_apply = get_git_diff(args.context_size)
     # renamed, clean_diff = extract_renames(full_diff)
-    patch_set = parse_diff(full_diff)
-
-    # groups = group_hunks("\n".join(clean_diff), args.n, args.affinitty)
+    patch_set = parse_diff(diff_to_apply)
 
     i = 0
-    hunks = ""
     all_hunks = []
+    hunks = "# Hunks\n"
+    context = "# Contextual Files\n"
     for patched_file in patch_set:
+        file_contents = open(patched_file.path, "r").read()
+        context += f"## {patched_file.path}\n"
+        context += f"```\n{file_contents}\n```\n"
+
         for hunk in patched_file:
             newhunk = f"--- {patched_file.source_file}\n"
             newhunk += f"+++ {patched_file.target_file}\n"
@@ -357,7 +360,7 @@ def generate_changes(args, model):
             all_hunks.append(newhunk)
             hunks += f"\n==== Hunk {i} ({patched_file.path}) ====\n" + str(hunk)
             i += 1
-    clusters = get_groups(hunks, args.n, model)
+    clusters = get_groups(hunks, args.n, context, model)
     groups = {}
     for k, v in enumerate(clusters, start=0):
         groups[k] = [all_hunks[s] for s in v if len(v) > 0]
@@ -375,11 +378,16 @@ def generate_changes(args, model):
     #     renames.append((renamed, commit_messages))
 
     patches = []
-    logger.info(f"Separated into {len(groups)} groups of changes from {sum([len(g) for g in groups.values()])} hunks")
+    logger.info(f"Separated into {len(groups)} groups of changes from {sum([len(g) for g in groups.values()])} hunks. Is this fine? [Y/n]")
+    response = input()
+    if response.lower() != "y":
+        logger.error("Aborted by user.")
+        sys.exit(1)
+
     for n, hunks in enumerate(groups.values(), 1):
         diff = "\n".join([str(hunk) for hunk in hunks])
         token_count = num_tokens_from_string(diff, model)
-        if token_count > MODEL_TOKEN_LIMITS.get(model):
+        if token_count > MODEL_TOKEN_LIMITS.get(model, 127514):
             logger.error(f"This diff is too big, ignoring it")
             continue
         responses = send_request(diff, model)
@@ -402,13 +410,13 @@ def generate_changes(args, model):
     try:
         for hunks, commit_messages in patches:
             diff = "\n".join([str(hunk) for hunk in hunks])
-            logger.info(f"diff: {diff}\ncommit_messages: {commit_messages}")
+            logger.debug(f"diff: {diff}\ncommit_messages: {commit_messages}")
             stage_changes(hunks)
 
             # Check if there is only one commit message option
             if len(commit_messages) == 1:
                 message = commit_messages[0]
-                logger.info(f"Only one commit message available. Proceeding with auto-commit: {message}")
+                logger.info(f"Auto-commiting: {message}")
                 run(f"git commit -m '{message}'")
             else:
                 # If there are multiple commit messages, let the user pick one
@@ -418,12 +426,12 @@ def generate_changes(args, model):
     except Exception as e:
         logger.error(f"Failed to stage changes: {e}. Will restore the changes and exit.")
         run(f"git reset {previous_sha}")
-        restore_changes(full_diff)
+        restore_changes(diff_to_apply)
         sys.exit(1)
     except KeyboardInterrupt:
         logger.error("Aborted by user. Will restore the changes and exit.")
         run(f"git reset {previous_sha}")
-        restore_changes(full_diff)
+        restore_changes(diff_to_apply)
 
 
 def num_tokens_from_string(text, model):
