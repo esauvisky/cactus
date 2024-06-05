@@ -20,6 +20,7 @@ import subprocess
 import sys
 
 from openai import OpenAI
+
 client = None
 
 import pick
@@ -27,11 +28,16 @@ from loguru import logger
 from thefuzz import fuzz
 import tiktoken
 
-from grouper import group_hunks, parse_diff, stage_changes, extract_renames
+from grouper import parse_diff, stage_changes
 
 SIMILARITY_THRESHOLD = 70
 
-PROMPT_CLASSIFICATOR_SYSTEM = """As a highly skilled AI, you will analyze the list of provided code diffs and return a JSON containing a list of lists of indexes of the hunks that are likely to be related and belong to the same commit. Each hunk will be represented by an index in the input diff. You will cluster the hunks based on their similarity and relationship in the best way possible. For example, if a hunk is related to the same feature or implementation of another hunk, it will be included in the same cluster. If the user provides a number of total clusters, you will split the hunks enough to fit the number of clusters, if he doesn't, use your best judgment to come up with a decent number of commits. Your response, i.e., the JSON, must be formatted as the following example, inside a codeblock:
+PROMPT_CLASSIFICATOR_SYSTEM = """As an advanced AI, your task is to analyze a set of code changes, represented as "hunks," and intelligently group related hunks together. You will be provided with the contents of the files that were modified, followed by a list of hunks. Each hunk represents a specific modification within the code. Your goal is to identify hunks that likely belong to the same commit, indicating they address a common issue or feature.
+
+You will receive these hunks as a list, with each hunk identified by a unique index. Your analysis should consider the file contents and cluster hunks based on their similarity and relationships, such as addressing the same feature or bug fix.  Minor changes, like adding an import or fixing a typo, should not be isolated in their own clusters unless they are the only changes present. It's acceptable for these minor modifications to be grouped with a related feature cluster or grouped together.
+
+Your output should be a JSON formatted as follows:
+
 ```json
 {
     "hunks": [
@@ -42,8 +48,16 @@ PROMPT_CLASSIFICATOR_SYSTEM = """As a highly skilled AI, you will analyze the li
     ]
 }
 ```
-Do not leave clusters empty. Return the JSON only, no other text.
-Avoid too many clusters with too few hunks each.
+
+Each inner list within "hunks" represents a cluster, containing the indices of the grouped hunks.
+
+Consider these factors in your analysis:
+
+* **User-specified Cluster Count:** If a target number of clusters is provided, strive to create that many clusters.
+* **Automatic Clustering:** If no target is given, determine an appropriate number of clusters based on the relationships between hunks and the file contents.
+* **Cluster Size:** Avoid creating clusters with very few hunks, especially for minor changes like imports or typos.
+
+Your primary goal is to ensure that hunks within the same cluster are meaningfully related, ultimately assisting developers in understanding and managing code changes effectively.
 """
 
 PROMPT_MULTIPLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a list of 5 distinct commit messages that summarize all the changes made in a single message. I will use the Conventional Commits guidelines as a reference, but prioritize creating messages that encompass all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. The generated commit messages will be ordered from best to worst."""
