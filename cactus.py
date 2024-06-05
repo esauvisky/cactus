@@ -453,7 +453,7 @@ def num_tokens_from_string(text, model):
 
 
 def split_into_chunks(text, model="gpt-4o"):
-    max_tokens = MODEL_TOKEN_LIMITS.get(model) - 64 # Default to 128000 if model not found
+    max_tokens = MODEL_TOKEN_LIMITS.get(model, 127514) - 64 # Default to 127514 if model not found
     """
     Split the text into chunks of the specified size.
     """
@@ -495,23 +495,24 @@ def generate_changelog(args, model):
     changelog = ''
     for chunk in chunks:
         # send request and append result to changelog
-        response = client.chat.completions.create(model="gpt-4o",
-        n=1,
-        top_p=0.8,
-        temperature=0.8,
-        stop=None,
-        max_tokens=1000,
-        messages=[
-            {
-                "role": "system",
-                "content": "As a highly skilled AI, you will provide me with a properly formatted changelog targeting the final user, in a list form using Markdown, and nothing else."
-            },
-            {
-                "role": "user",
-                "content": PROMPT_CHANGELOG + f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n"
-                                                                                                                                                                                          # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
-            },
-        ])
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            n=1,
+            top_p=0.8,
+            temperature=0.8,
+            stop=None,
+            max_tokens=1000,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "As a highly skilled AI, you will provide me with a properly formatted changelog targeting the final user, in a list form using Markdown, and nothing else."
+                },
+                {
+                    "role": "user",
+                    "content": PROMPT_CHANGELOG + f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n"
+                                                                                                                                                                                              # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
+                },
+            ])
         changelog += response.choices[0].message.content
 
     logger.debug(pprint.pformat(response))
@@ -523,8 +524,11 @@ if __name__ == "__main__":
     class Formatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
         pass
 
-    PARSER = argparse.ArgumentParser(prog="cactus", formatter_class=Formatter, allow_abbrev=True,
-                                     description="Without arguments, generates commit messages for all the currently staged changes.")
+    PARSER = argparse.ArgumentParser(
+        prog="cactus",
+        formatter_class=Formatter,
+        allow_abbrev=True,
+        description="Without arguments, generates commit messages for all the currently staged changes.")
     # PARSER.add_argument(nargs="?", type=int, help="")
     PARSER.add_argument("-d", "--debug", action="store_true", help="Show debug messages")
     PARSER.add_argument(
@@ -532,7 +536,7 @@ if __name__ == "__main__":
         "--context-size",
         nargs="?",
         type=int,
-        default=2,
+        default=0,
         help="Context size of the git diff (lines before and after each hunk)")
     PARSER.add_argument(
         "-m",
