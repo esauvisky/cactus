@@ -330,8 +330,9 @@ def generate_changes(args, model):
         message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
     logger.success(message)
 
+    logger.warning("Is this fine? [Y/n]")
     response = input()
-    if response.lower() != "y":
+    if response.lower() != "y" and response != "":
         logger.error("Aborted by user.")
         sys.exit(1)
 
