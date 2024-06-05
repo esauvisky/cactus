@@ -79,31 +79,6 @@ def load_api_key(api_type):
         return None
 
 
-def preprocess_diff(diff):
-    lines = diff.split('\n')
-    processed_lines = []
-
-    for line in lines:
-        # Skip file name and index lines
-        if line.startswith('---') or line.startswith('+++') or line.startswith('index'):
-            continue
-        elif line.startswith('@@'):
-            # Extract line numbers and count from the @@ line
-            numbers = re.findall(r'\d+', line)
-            if len(numbers) == 4:
-                from_line, from_count, to_line, to_count = numbers
-                processed_lines.append(f'Changed lines {from_line}-{int(from_line) + int(from_count) - 1} to lines {to_line}-{int(to_line) + int(to_count) - 1}')
-        elif line.startswith('-'):
-            processed_lines.append(f'Removed: "{line[1:].strip()}"')
-        elif line.startswith('+'):
-            processed_lines.append(f'Added: "{line[1:].strip()}"')
-
-    # Combine processed lines into a single string
-    joined_lines = '; '.join(processed_lines)
-
-    return joined_lines
-
-
 def run(cmd):
     result = subprocess.run(
         cmd,
@@ -111,8 +86,8 @@ def run(cmd):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    result.stdout = result.stdout.decode("utf-8").strip()
-    result.stderr = result.stderr.decode("utf-8").strip()
+    result.stdout = result.stdout.decode("utf-8").strip() # type: ignore
+    result.stderr = result.stderr.decode("utf-8").strip() # type: ignore
     return result
 
 
@@ -292,7 +267,7 @@ def generate_changelog(args, model):
     logger.debug(diff)
 
     if len(chunks) > 1:
-        logger.warning(f"Diff went over max token limit ({num_tokens_from_string(diff)} > {MODEL_TOKEN_LIMITS.get(model)}). Splitted into {len(chunks)} chunks.")
+        logger.warning(f"Diff went over max token limit ({num_tokens_from_string(diff, model)} > {MODEL_TOKEN_LIMITS.get(model)}). Splitted into {len(chunks)} chunks.")
 
     changelog = ''
     for chunk in chunks:
@@ -385,13 +360,13 @@ if __name__ == "__main__":
         "--context-size",
         nargs="?",
         type=int,
-        default=0,
+        default=1,
         help="Context size of the git diff (lines before and after each hunk)")
     PARSER.add_argument(
         "-m",
         "--model",
         action="store",
-        default="gpt-4o",
+        default="gemini-1.5-pro",
         help="Model used for the generations",
     )
     PARSERS = PARSER.add_subparsers(title="subcommands", dest="action")
@@ -410,7 +385,8 @@ if __name__ == "__main__":
         "-p", "--pathspec", action="store", nargs="?", help="Get changelogs for these pathspecs only")
     CHANGELOG_PARSER.add_argument("sha", nargs="?", help="Target commit SHA from which to generate the changelog")
     SETUP_PARSER = PARSERS.add_parser(
-        "setup", help="Performs the initial setup for setting the OpenAPI token", formatter_class=Formatter)
+        "setup", help="Performs the initial setup for setting the API token", formatter_class=Formatter)
+    SETUP_PARSER.add_argument("api", choices=["OpenAI", "Gemini"], help="The API to set up.")
 
     for subparsers_action in [action for action in PARSER._actions if isinstance(action, argparse._SubParsersAction)]:
         for choice, subparser in subparsers_action.choices.items():
@@ -455,8 +431,7 @@ if __name__ == "__main__":
     if args.action == "generate":
         if "n" not in args:
             args.n = None
-
-        logger.success(f"Generating {args.action} commit messages with context size {args.context_size}.")
+        logger.info(f"Generating commit messages using {args.model}...")
         generate_changes(args, args.model)
     elif args.action == "changelog":
         generate_changelog(args, args.model)
