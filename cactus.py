@@ -197,18 +197,14 @@ def get_git_diff(context_size):
         logger.error("No staged changes found, please stage the desired changes.")
         sys.exit(1)
 
-    # cmd = f"git --no-pager diff --staged --ignore-space-at-eol --ignore-all-space --ignore-blank-lines --ignore-space-change --inter-hunk-context={context_size} "
-    # cmd += f"--ignore-submodules --ignore-space-at-eol --minimal --no-color --no-ext-diff --no-indent-heuristic --no-textconv --no-renames --unified={context_size}"
-
-    # cmd = f"git diff --staged --inter-hunk-context={context_size} --ignore-submodules --minimal -p" # --no-ext-diff --no-indent-heuristic --no-textconv "
     cmd = f"git diff --inter-hunk-context={context_size} --unified={context_size} --minimal -p --staged"
-    # cmd += f"--unified=3"
     result = run(cmd)
     if result.returncode != 0:
         logger.error("Failed to get git diff: %s", result.stderr.decode().strip())
         sys.exit(1)
-    result = result.stdout
-    return result
+    diff_to_apply = result.stdout
+
+    return diff_to_apply
 
 
 def fix_message(message):
