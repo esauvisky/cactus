@@ -500,7 +500,9 @@ if __name__ == "__main__":
     class Formatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
         pass
 
-    PARSER = argparse.ArgumentParser(prog="cactus", formatter_class=Formatter, allow_abbrev=True)
+    PARSER = argparse.ArgumentParser(prog="cactus", formatter_class=Formatter, allow_abbrev=True,
+                                     description="Without arguments, generates commit messages for all the currently staged changes.")
+    # PARSER.add_argument(nargs="?", type=int, help="")
     PARSER.add_argument("-d", "--debug", action="store_true", help="Show debug messages")
     PARSER.add_argument(
         "-c",
@@ -509,8 +511,6 @@ if __name__ == "__main__":
         type=int,
         default=2,
         help="Context size of the git diff (lines before and after each hunk)")
-    PARSER.add_argument(
-        "-a", "--affinitty", type=float, default=0.1, help="Affinity of the model (lower is more commits)")
     PARSER.add_argument(
         "-m",
         "--model",
@@ -544,6 +544,10 @@ if __name__ == "__main__":
             help_lines[1] = "\u001b[34m" + help_lines[1] + "\u001b[00m"
             PARSER.epilog = (PARSER.epilog or "") + ("\u001b[00m\n\u001b[36;00m".join(help_lines[0:2]) + "\n" + ("\n  ").join(help_lines[2:]))
 
+    # try to make the first argument a subcommand if it's a number
+    # this is useful for running `cactus 1` instead of `cactus generate 1`
+    if len(sys.argv) == 2 and sys.argv[1].isdigit():
+        sys.argv.insert(1, "generate")
     args = PARSER.parse_args()
 
     setup_logging("INFO")
@@ -566,12 +570,10 @@ if __name__ == "__main__":
         args.action = "generate"
 
     if args.action == "generate":
-        if "affinitty" not in args or not 0 <= args.affinitty < 1:
-            args.affinitty = 0.1
         if "n" not in args:
             args.n = None
 
-        logger.success(f"Generating {args.action} commit messages with context size {args.context_size} and affinity {args.affinitty}.")
+        logger.success(f"Generating {args.action} commit messages with context size {args.context_size}.")
         generate_changes(args, args.model)
     elif args.action == "changelog":
         generate_changelog(args, args.model)
