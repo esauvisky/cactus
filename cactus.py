@@ -254,25 +254,29 @@ def filter_and_sort_similar_strings(strings, similarity_threshold=90):
     return unique_strings
 
 
-def get_groups(hunks, clusters_n, model):
+def get_groups(hunks, clusters_n, context, model):
     logger.debug(f"hunks: {hunks}")
-    response = client.chat.completions.create(model=model, # type: ignore
-    top_p=1,
-    temperature=1,
-    max_tokens=512,
-    response_format={"type": "json_object"},
-    messages=[
-        {
-            "role": "system",
-            "content": PROMPT_CLASSIFICATOR_SYSTEM
-        },
-        {
-            "role": "user",
-            "content": hunks + (f"\n\nSplit the hunks above into {clusters_n} clusters and return the JSON." if clusters_n else "\n\nSplit the hunks above into clusters and return the JSON.")
-        },
-    ])
+    response = client.chat.completions.create(
+        model=model,                                                                                                    # type: ignore
+        top_p=1,
+        temperature=1,
+        max_tokens=512,
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "system", "content": PROMPT_CLASSIFICATOR_SYSTEM
+            },
+            {
+                "role": "user", "content": context
+            },
+            {
+                "role": "user",
+                "content": hunks + (f"\n\nSplit the hunks above into {clusters_n} clusters and return the JSON."
+                                    if clusters_n else "\n\nSplit the hunks above into clusters and return the JSON.")
+            },
+        ])
     logger.debug(f"response: {response}")
-    content = json.loads(response.choices[0].message.content) # type: ignore
+    content = json.loads(response.choices[0].message.content)                                                           # type: ignore
     result = content["hunks"]
     logger.debug(f"groups: {result}")
     return result
@@ -286,23 +290,24 @@ def send_request(diff, model):
     # for ammount, temp, model, single_or_multiple in [(2, 0.95, "gpt-4", "multiple")]:
     for ammount, temp, model, single_or_multiple in [(1, 0.1, model, "single")]:
         # for ammount, temp, model, single_or_multiple in [(5, 0.1, "gpt-4o", "multiple")]:
-        response = client.chat.completions.create(model=model, # type: ignore
-        n=ammount,
-        top_p=1,
-        temperature=temp,
-        max_tokens=1024,
-        response_format={"type": "json_object"},
-        messages=[
-            {
-                "role": "system",
-                "content": PROMPT_SINGLE_SYSTEM if single_or_multiple == "single" else PROMPT_MULTIPLE_SYSTEM
-            },
-            {
-                "role": "user",
-                "content": PROMPT_SINGLE_START + diff + PROMPT_SINGLE_END
-                           if single_or_multiple == "single" else PROMPT_MULTIPLE_START + diff + PROMPT_MULTIPLE_END
-            },
-        ])
+        response = client.chat.completions.create(
+            model=model,                                                                                                  # type: ignore
+            n=ammount,
+            top_p=1,
+            temperature=temp,
+            max_tokens=1024,
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": PROMPT_SINGLE_SYSTEM if single_or_multiple == "single" else PROMPT_MULTIPLE_SYSTEM
+                },
+                {
+                    "role": "user",
+                    "content": PROMPT_SINGLE_START + diff + PROMPT_SINGLE_END
+                               if single_or_multiple == "single" else PROMPT_MULTIPLE_START + diff + PROMPT_MULTIPLE_END
+                },
+            ])
 
         # Fix some common issues
         for choice in response.choices:
