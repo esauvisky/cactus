@@ -6,7 +6,8 @@ Consider the following:
 - **You should strive to group hunks that address a common issue or feature into the same commit.**
 - **The order of commits should reflect a logical workflow, mimicking a developer's process, starting with the oldest commit and progressing to the newest.**
 - **Minor changes (e.g., adding imports, fixing typos) should be grouped with related features or placed in a dedicated commit at the end.**
-- **Instead of concentrating hunks into a few large commits or having commits with very few hunks, aim for a balanced distribution of hunks across commits.**
+- **Aim for a balanced distribution of hunks across commits.**
+- **Every hunk index should be used once and only once.**
 
 Your output should be a JSON structure formatted as follows:
 

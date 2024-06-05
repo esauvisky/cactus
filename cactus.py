@@ -164,8 +164,8 @@ def get_clusters_from_openai(prompt_data, clusters_n, model):
                 "role": "user", "content": prompt_data
             },
             {
-                "role": "user", "content": f"Split the hunks above into {clusters_n} clusters and return the JSON."
-                                         if clusters_n else "Split the hunks above into clusters and return the JSON."
+                "role": "user", "content": f"Return a JSON with {clusters_n} commits for the hunks above."
+                                         if clusters_n else "Return the JSON for the hunks above."
             },
         ])
     content = json.loads(response.choices[0].message.content) # type: ignore
@@ -193,8 +193,8 @@ def get_clusters_from_gemini(prompt_data, clusters_n, model):
         },
     ])
 
-    response = chat_session.send_message(f"Split the hunks above into {clusters_n} clusters and return the JSON."
-                                         if clusters_n else "Split the hunks above into clusters and return the JSON.")
+    response = chat_session.send_message(f"Return a JSON with {clusters_n} commits for the hunks above."
+                                         if clusters_n else "Return the JSON for the hunks above.")
     content = json.loads(response.text)
     clusters = content["commits"]
     return clusters
