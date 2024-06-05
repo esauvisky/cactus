@@ -198,11 +198,11 @@ def get_git_diff(context_size):
 
 
 def fix_message(message):
-    pattern_type = "^(([a-zA-Z]+)(\(.*?\))?:\s+)"
-    pattern_no_period = "\.$"
-    pattern_first_letter = "^[a-zA-Z]+\([a-zA-Z]+\): ([A-Z])"
-    pattern_numeric_prefix = "^\d+\s*[-.:\)]\s*"
-    pattern_codeblock = "```.*"
+    pattern_type = r"^(([a-zA-Z]+)(\(.*?\))?:\s+)"
+    pattern_no_period = r"\.$"
+    pattern_first_letter = r"^[a-zA-Z]+\([a-zA-Z]+\): ([A-Z])"
+    pattern_numeric_prefix = r"^\d+\s*[-.:\)]\s*"
+    pattern_codeblock = r"```.*"
 
     # Remove code blocks
     message = re.sub(pattern_codeblock, "", message)
@@ -397,7 +397,7 @@ def generate_changes(args, model):
                 run(f"git commit -m '{message}'")
             else:
                 # If there are multiple commit messages, let the user pick one
-                os.system('echo -e "\e[1;35mInspect the diff below and press Q when done.\n\n$(git diff --staged --color=always)" | less -R ')
+                os.system(r'echo -e "\e[1;35mInspect the diff below and press Q when done.\n\n$(git diff --staged --color=always)" | less -R ')
                 message, _ = pick.pick(commit_messages, r'\e[1;35m' + "Choose a commit message for the preceding differences. Press Ctrl+C to quit and restore all current changes.", indicator='=>', default_index=0)
                 run(f"git commit -m '{message}'")
     except Exception as e:
