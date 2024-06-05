@@ -43,6 +43,8 @@ MODEL_TOKEN_LIMITS = {
     "gpt-4-1106-preview": 127514,
     "gpt-4o": 127514,
     "gpt-4": 16384,
+    "gemini-1.5-pro": 1048576,
+    "gemini-1.5-flash": 1048576,
 }
 
 
@@ -58,21 +60,21 @@ def setup_logging(level="DEBUG", show_module=False):
     logger.add(sys.stderr, level=log_level, format=log_fmt, colorize=True, backtrace=True, diagnose=True)
 
 
-def setup_openai_token():
-    token = input("Enter your OpenAI token: ")
+def setup_api_key(api_type):
+    api_key = input(f"Enter your {api_type} API key: ")
     config_dir = os.path.expanduser("~/.config/cactus")
     os.makedirs(config_dir, exist_ok=True)
-    with open(os.path.join(config_dir, "openai_token"), "w") as f:
-        f.write(token)
-    logger.success("OpenAI token saved.")
+    with open(os.path.join(config_dir, f"{api_type.lower()}_api_key"), "w") as f:
+        f.write(api_key)
+    logger.success(f"{api_type} API key saved.")
 
 
-def load_openai_token():
+def load_api_key(api_type):
     config_dir = os.path.expanduser("~/.config/cactus")
     try:
-        with open(os.path.join(config_dir, "openai_token"), "r") as f:
-            token = f.read().strip()
-        return token
+        with open(os.path.join(config_dir, f"{api_type.lower()}_api_key"), "r") as f:
+            api_key = f.read().strip()
+        return api_key
     except FileNotFoundError:
         return None
 
@@ -132,128 +134,6 @@ def get_git_diff(context_size):
     return diff_to_apply
 
 
-def fix_message(message):
-    pattern_type = r"^(([a-zA-Z]+)(\(.*?\))?:\s+)"
-    pattern_no_period = r"\.$"
-    pattern_first_letter = r"^[a-zA-Z]+\([a-zA-Z]+\): ([A-Z])"
-    pattern_numeric_prefix = r"^\d+\s*[-.:\)]\s*"
-    pattern_codeblock = r"```.*"
-
-    # Remove code blocks
-    message = re.sub(pattern_codeblock, "", message)
-
-    # Remove numeric prefixes
-    message = re.sub(pattern_numeric_prefix, "", message)
-    message = message.strip(" .,\n")
-
-    # Correct the commit type (lowercase)
-    match = re.search(pattern_type, message)
-    if match:
-        commit_type = match.group(0)
-        message = message[len(commit_type):]
-        message = commit_type.lower() + message[0].lower() + message[1:]
-
-    # Remove periods at the end of the message
-    message = re.sub(pattern_no_period, "", message)
-
-    # Remove quotes at the beginning and end
-    message = re.sub("^\"", "", message)
-    message = re.sub("\"$", "", message)
-
-    return message
-
-
-def filter_and_sort_similar_strings(strings, similarity_threshold=90):
-    # Sorting the strings based on total similarity scores
-    string_scores = []
-    for s in strings:
-        total_score = sum(fuzz.partial_ratio(s, other_s) for other_s in strings)
-        string_scores.append((s, total_score))
-    sorted_strings = sorted(string_scores, key=lambda x: x[1], reverse=True)
-
-    # Filtering out similar strings
-    unique_strings = []
-    for s, _ in sorted_strings:
-        if not any(fuzz.partial_ratio(s, unique_s) >= similarity_threshold for unique_s in unique_strings):
-            unique_strings.append(s)
-    return unique_strings
-
-
-def get_groups(hunks, clusters_n, context, model):
-    logger.debug(f"hunks: {hunks}")
-    response = client.chat.completions.create(
-        model=model,                                                                                                    # type: ignore
-        top_p=1,
-        temperature=1,
-        max_tokens=512,
-        response_format={"type": "json_object"},
-        messages=[
-            {
-                "role": "system", "content": PROMPT_CLASSIFICATOR_SYSTEM
-            },
-            {
-                "role": "user", "content": context
-            },
-            {
-                "role": "user",
-                "content": hunks + (f"\n\nSplit the hunks above into {clusters_n} clusters and return the JSON."
-                                    if clusters_n else "\n\nSplit the hunks above into clusters and return the JSON.")
-            },
-        ])
-    logger.debug(f"response: {response}")
-    content = json.loads(response.choices[0].message.content)                                                           # type: ignore
-    result = content["hunks"]
-    logger.debug(f"groups: {result}")
-    return result
-
-
-def send_request(diff, model):
-    messages = []
-    pattern = re.compile(r"^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9_-]+\))?: [a-z].*$",
-                         re.IGNORECASE)
-    # for ammount, temp, model, single_or_multiple in [(3, 0.6, "gpt-3.5-turbo-16k", "single"), (2, 1.1, "gpt-3.5-turbo-16k", "multiple")]:
-    # for ammount, temp, model, single_or_multiple in [(2, 0.95, "gpt-4", "multiple")]:
-    for ammount, temp, model, single_or_multiple in [(1, 0.1, model, "single")]:
-        # for ammount, temp, model, single_or_multiple in [(5, 0.1, "gpt-4o", "multiple")]:
-        response = client.chat.completions.create(
-            model=model,                                                                                                  # type: ignore
-            n=ammount,
-            top_p=1,
-            temperature=temp,
-            max_tokens=1024,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": PROMPT_SINGLE_SYSTEM if single_or_multiple == "single" else PROMPT_MULTIPLE_SYSTEM
-                },
-                {
-                    "role": "user",
-                    "content": PROMPT_SINGLE_START + diff + PROMPT_SINGLE_END
-                               if single_or_multiple == "single" else PROMPT_MULTIPLE_START + diff + PROMPT_MULTIPLE_END
-                },
-            ])
-
-        # Fix some common issues
-        for choice in response.choices:
-            content = json.loads(choice.message.content)
-            logger.debug(f"am: {ammount}, temp: {temp}, model: {model}, single_or_multiple: {single_or_multiple}, content: {content}")
-            if single_or_multiple == "multiple":
-                messages = content["messages"]
-            else:
-                messages = [content["message"]]
-
-    # Filter out similar commit messages
-    fixed_messages = []
-    for message in messages:
-        fixed_message = fix_message(message)
-        if not pattern.match(fixed_message):
-            continue
-        fixed_messages.append(fixed_message)
-    unique_messages = filter_and_sort_similar_strings(fixed_messages, SIMILARITY_THRESHOLD)
-    return unique_messages
-
-
 def restore_changes(full_diff):
     with open("/tmp/cactus.diff", "w") as f:
         f.write(full_diff)
@@ -261,102 +141,99 @@ def restore_changes(full_diff):
     run("git apply --cached --unidiff-zero /tmp/cactus.diff")
 
 
-def generate_changes(args, model):
-    responses = None
-    previous_sha = run("git rev-parse --short HEAD").stdout
-
-    diff_to_apply = get_git_diff(args.context_size)
-    # renamed, clean_diff = extract_renames(full_diff)
+def get_patches_and_prompt(diff_to_apply):
     patch_set = parse_diff(diff_to_apply)
 
     i = 0
-    all_hunks = []
-    hunks = "# Hunks\n"
-    context = "# Contextual Files\n"
+    patches = []
+    prompt_data = {"files": {}, "hunks": []}
+
     for patched_file in patch_set:
         file_contents = open(patched_file.path, "r").read()
-        context += f"## {patched_file.path}\n"
-        context += f"```\n{file_contents}\n```\n"
+        prompt_data["files"][patched_file.path] = {
+            "content": file_contents
+        }
 
         for hunk in patched_file:
+            prompt_data["hunks"].append({
+                "hunk_index": i,
+                "content": str(hunk)
+            })
             newhunk = f"--- {patched_file.source_file}\n"
             newhunk += f"+++ {patched_file.target_file}\n"
-            newhunk += str(hunk)
-            all_hunks.append(newhunk)
-            hunks += f"\n==== Hunk {i} ({patched_file.path}) ====\n" + str(hunk)
+            newhunk += str(hunk) + "\n"
+            patches.append(newhunk)
             i += 1
-    clusters = get_groups(hunks, args.n, context, model)
-    groups = {}
-    for k, v in enumerate(clusters, start=0):
-        groups[k] = [all_hunks[s] for s in v if len(v) > 0]
-        # print(f"Group {k}: {v}")
 
-    # Now handle renames separately or log them as needed
-    renames = []
-    # if len(renamed):
-    #     responses = send_request(str(renamed), model)
-    #     # print(str(renamed))
-    #     clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
-    #     clean_responses = set([r.replace("`", "") for r in clean_responses])
-    #     commit_messages = [choice for choice in clean_responses]
-    #     logger.info(f"Generated commit messages for renames: {commit_messages}")
-    #     renames.append((renamed, commit_messages))
+    return patches, json.dumps(prompt_data)
 
-    patches = []
-    logger.info(f"Separated into {len(groups)} groups of changes from {sum([len(g) for g in groups.values()])} hunks. Is this fine? [Y/n]")
-    response = input()
-    if response.lower() != "y":
-        logger.error("Aborted by user.")
-        sys.exit(1)
 
-    for n, hunks in enumerate(groups.values(), 1):
-        diff = "\n".join([str(hunk) for hunk in hunks])
-        token_count = num_tokens_from_string(diff, model)
-        if token_count > MODEL_TOKEN_LIMITS.get(model, 127514):
-            logger.error(f"This diff is too big, ignoring it")
-            continue
-        responses = send_request(diff, model)
-        clean_responses = set([re.sub(r'(\s)+', r'\1', re.sub(r'\.$', '', r)) for r in responses])
-        clean_responses = set([r.replace("`", "") for r in clean_responses])
-        commit_messages = [choice for choice in clean_responses]
-        logger.info(f"Generated commit messages for group {n} with {len(hunks)} hunks: {commit_messages}")
-        patches.append((hunks, commit_messages))
+def get_clusters_from_openai(prompt_data, clusters_n, model):
+    response = openai.chat.completions.create(
+        model=model,
+        top_p=1,
+        temperature=1,
+        max_tokens=1024,
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "system", "content": PROMPT_CLASSIFICATOR_SYSTEM
+            },
+            {
+                "role": "user", "content": prompt_data
+            },
+            {
+                "role": "user", "content": f"Split the hunks above into {clusters_n} clusters and return the JSON."
+                                         if clusters_n else "Split the hunks above into clusters and return the JSON."
+            },
+        ])
+    content = json.loads(response.choices[0].message.content) # type: ignore
+    clusters = content["commits"]
+    return clusters
 
-    # patches.extend(renames)
-    logger.debug(f"Generated {len(patches)} commits for {len(groups)} groups (sizes: {', '.join([str(len(g)) for g in groups.values()])})")
 
-    # unstage all staged changes
-    logger.info("Unstaging all staged changes and applying individual diffs...")
-    run("git restore --staged .")
-    time.sleep(1)
+def get_clusters_from_gemini(prompt_data, clusters_n, model):
+    model = genai.GenerativeModel(
+        model_name=model,
+        generation_config=gemini_config,                                                   # type: ignore
+        safety_settings={
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        },
+        system_instruction=PROMPT_CLASSIFICATOR_SYSTEM,
+    )
 
-    # try:
-    # Handle renames first
-    try:
-        for hunks, commit_messages in patches:
-            diff = "\n".join([str(hunk) for hunk in hunks])
-            logger.debug(f"diff: {diff}\ncommit_messages: {commit_messages}")
-            stage_changes(hunks)
+    chat_session = model.start_chat(history=[
+        {
+            "role": "user",
+            "parts": prompt_data,
+        },
+    ])
 
-            # Check if there is only one commit message option
-            if len(commit_messages) == 1:
-                message = commit_messages[0]
-                logger.info(f"Auto-commiting: {message}")
-                run(f"git commit -m '{message}'")
-            else:
-                # If there are multiple commit messages, let the user pick one
-                os.system(r'echo -e "\e[1;35mInspect the diff below and press Q when done.\n\n$(git diff --staged --color=always)" | less -R ')
-                message, _ = pick.pick(commit_messages, r'\e[1;35m' + "Choose a commit message for the preceding differences. Press Ctrl+C to quit and restore all current changes.", indicator='=>', default_index=0)
-                run(f"git commit -m '{message}'")
-    except Exception as e:
-        logger.error(f"Failed to stage changes: {e}. Will restore the changes and exit.")
-        run(f"git reset {previous_sha}")
-        restore_changes(diff_to_apply)
-        sys.exit(1)
-    except KeyboardInterrupt:
-        logger.error("Aborted by user. Will restore the changes and exit.")
-        run(f"git reset {previous_sha}")
-        restore_changes(diff_to_apply)
+    response = chat_session.send_message(f"Split the hunks above into {clusters_n} clusters and return the JSON."
+                                         if clusters_n else "Split the hunks above into clusters and return the JSON.")
+    content = json.loads(response.text)
+    clusters = content["commits"]
+    return clusters
+
+
+def generate_commits(all_hunks, clusters, previous_sha, diff_to_apply):
+    for cluster in clusters:
+        hunks_in_cluster = [all_hunks[i] for i in cluster["hunk_indices"]]
+        diff = "\n".join(hunks_in_cluster)
+        message = cluster["message"]
+
+        try:
+            stage_changes(hunks_in_cluster)
+            logger.info(f"Auto-commiting: {message}")
+            run(f"git commit -m '{message}'")
+        except Exception as e:
+            logger.error(f"Failed to stage changes: {e}. Will restore the changes and exit.")
+            run(f"git reset {previous_sha}")
+            restore_changes(diff_to_apply)
+            sys.exit(1)
 
 
 def num_tokens_from_string(text, model):
@@ -396,7 +273,7 @@ def split_into_chunks(text, model="gpt-4o"):
 
 def generate_changelog(args, model):
     # get list of commit messages from args.sha to HEAD
-    commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.split('\n')
+    commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.decode().split("\n")
 
     # prepare exclude patterns for git diff
     pathspec = f"-- {args.pathspec}" if args.pathspec else ''
@@ -420,28 +297,75 @@ def generate_changelog(args, model):
     changelog = ''
     for chunk in chunks:
         # send request and append result to changelog
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            n=1,
-            top_p=0.8,
-            temperature=0.8,
-            stop=None,
-            max_tokens=1000,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "As a highly skilled AI, you will provide me with a properly formatted changelog targeting the final user, in a list form using Markdown, and nothing else."
-                },
+        if "gemini" in model:
+            gemini_model = genai.GenerativeModel(
+                model_name=model,
+                generation_config=generation_config,                                                                                                                                              # type: ignore
+                                                                                                                                                                                                  # safety_settings=Adjust safety settings
+                                                                                                                                                                                                  # See https://ai.google.dev/gemini-api/docs/safety-settings
+                system_instruction="As a highly skilled AI, you will provide me with a properly formatted changelog targeting the final user, in a list form using Markdown, and nothing else.",
+            )
+            chat_session = gemini_model.start_chat(history=[
                 {
                     "role": "user",
-                    "content": PROMPT_CHANGELOG + f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n"
-                                                                                                                                                                                              # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
+                    "parts": [
+                        f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n",
+                    ],
                 },
             ])
-        changelog += response.choices[0].message.content
+            response = chat_session.send_message("")
+            changelog += response.text
+        else:
+            import openai
+            response = openai.chat.completions.create(
+                model=model,
+                n=1,
+                top_p=0.8,
+                temperature=0.8,
+                stop=None,
+                max_tokens=1000,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "As a highly skilled AI, you will provide me with a properly formatted changelog targeting the final user, in a list form using Markdown, and nothing else."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n"
+                                                                                                                                                                                                  # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
+                    },
+                ])
+            changelog += response.choices[0].message.content                                                                                                                                      # type: ignore
 
-    logger.debug(pprint.pformat(response))
     logger.info(f"{changelog}")
+
+
+def generate_changes(args, model):
+    previous_sha = run("git rev-parse --short HEAD").stdout
+    diff_to_apply = get_git_diff(args.context_size)
+    patches, prompt_data = get_patches_and_prompt(diff_to_apply)
+
+    if "gemini" in model:
+        clusters = get_clusters_from_gemini(prompt_data, args.n, model)
+    else:
+        clusters = get_clusters_from_openai(prompt_data, args.n, model)
+
+    message = f"Separated into {len(clusters)} groups of changes from {len(patches)} hunks:\n"
+    for ix, cluster in enumerate(clusters):
+        message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
+    logger.success(message)
+
+    response = input()
+    if response.lower() != "y":
+        logger.error("Aborted by user.")
+        sys.exit(1)
+
+    # unstage all staged changes
+    logger.warning("Unstaging all staged changes and applying individual diffs...")
+    run("git restore --staged .")
+    time.sleep(1)
+
+    generate_commits(patches, clusters, previous_sha, diff_to_apply)
 
 
 if __name__ == "__main__":
@@ -506,15 +430,22 @@ if __name__ == "__main__":
     # setup_logging("DEBUG")
 
     if args.action == "setup":
-        setup_openai_token()
+        setup_api_key(args.api)
         sys.exit(0)
 
-    openai_token = load_openai_token()
-    if openai_token is None:
-        logger.error("OpenAI token not found. Please run `cactus --setup` first.")
-        sys.exit(1)
+    if "gemini" in args.model:
+        gemini_api_key = load_api_key("Gemini")
+        if gemini_api_key is None:
+            logger.error("Gemini API key not found. Please run `cactus setup Gemini` first.")
+            sys.exit(1)
+        genai.configure(api_key=gemini_api_key)
+    else:
+        openai_token = load_api_key("OpenAI")
+        if openai_token is None:
+            logger.error("OpenAI token not found. Please run `cactus setup OpenAI` first.")
+            sys.exit(1)
+        openai.api_key = openai_token
 
-    client = OpenAI(api_key=openai_token)
     if isinstance(args.action, int):
         args.n = args.action
         args.action = "generate"
