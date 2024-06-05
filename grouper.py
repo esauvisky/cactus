@@ -1,3 +1,4 @@
+from typing import List
 import os
 import pprint
 import re
@@ -21,10 +22,59 @@ import re
 from collections import Counter
 
 # List of common programming language reserved words to exclude (example for Python)
-RESERVED_WORDS = set(["def", "import", "from", "as", "if", "else", "return", "class", "self", "for", "in", "try", "except", "with", "while", "break", "continue", "pass", "lambda", "is", "not", "and", "or", "None", "True", "False"])
+RESERVED_WORDS = set([
+    "def",
+    "import",
+    "from",
+    "as",
+    "if",
+    "else",
+    "return",
+    "class",
+    "self",
+    "for",
+    "in",
+    "try",
+    "except",
+    "with",
+    "while",
+    "break",
+    "continue",
+    "pass",
+    "lambda",
+    "is",
+    "not",
+    "and",
+    "or",
+    "None",
+    "True",
+    "False"
+])
 
 # List of common English words to exclude
-COMMON_ENGLISH_WORDS = set(["the", "and", "in", "to", "a", "of", "is", "it", "that", "for", "on", "with", "this", "as", "by", "are", "be", "or", "an", "have", "can"])
+COMMON_ENGLISH_WORDS = set([
+    "the",
+    "and",
+    "in",
+    "to",
+    "a",
+    "of",
+    "is",
+    "it",
+    "that",
+    "for",
+    "on",
+    "with",
+    "this",
+    "as",
+    "by",
+    "are",
+    "be",
+    "or",
+    "an",
+    "have",
+    "can"
+])
 
 
 def jaccard_similarity(str1, str2):
@@ -38,6 +88,7 @@ def jaccard_similarity(str1, str2):
         return 0
 
     return len(intersection) / len(union)
+
 
 def get_most_common_words(hunks, n=10):
     word_counts = Counter()
@@ -143,7 +194,8 @@ def extract_renames(git_diff):
 
     return renames, clean_diff
 
-def parse_diff(git_diff):
+
+def parse_diff(git_diff) -> List[PatchedFile]:
     for _ in range(5):
         try:
             # Attempt to parse the diff
@@ -261,6 +313,7 @@ def stage_renames(renames):
         # old_name, new_name = patched_file.source_file, patched_file.target_file
         # subprocess.run(['git', 'mv', old_name, new_name], check=True)
         # subprocess.run(['git', 'add', new_name], check=True)
+
 
 def stage_changes(hunks):
     # Handle regular changes
