@@ -3,113 +3,38 @@
 CACTUS Automates Commits Through Uncomplicated Suggestions
 """
 __author__ = "emi"
-__version__ = "2.1.0"
+__version__ = "3.0.0"
 __license__ = "MIT"
 
 import argparse
 import os
 import pprint
 import time
-
-from pprint import pprint
 import json
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import re
 import subprocess
 import sys
 
-from openai import OpenAI
+import openai
+from loguru import logger
+import tiktoken
+
+from constants import PROMPT_CLASSIFICATOR_SYSTEM
 
 client = None
 
-import pick
-from loguru import logger
-from thefuzz import fuzz
-import tiktoken
+import google.generativeai as genai
+from google.generativeai import protos
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
+# Create the model
+gemini_config = {
+    "temperature": 1,
+    "top_p": 0.8,
+    "top_k": 64,
+    "max_output_tokens": 1024,
+    "response_mime_type": "application/json",
+}
 from grouper import parse_diff, stage_changes
-
-SIMILARITY_THRESHOLD = 70
-
-PROMPT_CLASSIFICATOR_SYSTEM = """As an advanced AI, your task is to analyze a set of code changes, represented as "hunks," and intelligently group related hunks together. You will be provided with the contents of the files that were modified, followed by a list of hunks. Each hunk represents a specific modification within the code. Your goal is to identify hunks that likely belong to the same commit, indicating they address a common issue or feature.
-
-You will receive these hunks as a list, with each hunk identified by a unique index. Your analysis should consider the file contents and cluster hunks based on their similarity and relationships, such as addressing the same feature or bug fix.  Minor changes, like adding an import or fixing a typo, should not be isolated in their own clusters unless they are the only changes present. It's acceptable for these minor modifications to be grouped with a related feature cluster or grouped together.
-
-Your output should be a JSON formatted as follows:
-
-```json
-{
-    "hunks": [
-        [0, 1, 5],
-        [4],
-        [3, 2, 6, 7, 8],
-        ...
-    ]
-}
-```
-
-Each inner list within "hunks" represents a cluster, containing the indices of the grouped hunks.
-
-Consider these factors in your analysis:
-
-* **User-specified Cluster Count:** If a target number of clusters is provided, strive to create that many clusters.
-* **Automatic Clustering:** If no target is given, determine an appropriate number of clusters based on the relationships between hunks and the file contents.
-* **Cluster Size:** Avoid creating clusters with very few hunks, especially for minor changes like imports or typos.
-
-Your primary goal is to ensure that hunks within the same cluster are meaningfully related, ultimately assisting developers in understanding and managing code changes effectively.
-"""
-
-PROMPT_MULTIPLE_SYSTEM = """As a highly skilled AI, I will analyze the provided code diff and generate a list of 5 distinct commit messages that summarize all the changes made in a single message. I will use the Conventional Commits guidelines as a reference, but prioritize creating messages that encompass all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. The generated commit messages will be ordered from best to worst."""
-PROMPT_MULTIPLE_START = """Analyze the following diff and generate a list of 5 commit messages, each summarizing all the changes made. Use the Conventional Commits guidelines as a reference but prioritize encompassing all changes in one message. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc.
-
-Conventional Commits guidelines:
-1. Commit messages should start with a type (e.g., feat, fix, chore, docs).
-2. Optionally, include a scope in parentheses after the type, describing the area of the code affected.
-3. The commit message subject must be separated from the type (and scope, if included) by a colon and a space.
-4. The subject should be a concise description of the changes.
-
---- Begin diff ---
-"""
-
-PROMPT_MULTIPLE_END = """
---- End diff ---
-
-Provide the commit messages as a descending-ordered list from best to worst, inside a JSON object like in the example below:
-
-{
-    "messages": [
-        "feat: Added a new feature",
-        "fix: Fixed a bug",
-        "chore: Updated the codebase",
-        "docs: Updated the documentation",
-        "refactor: Refactored the code",
-    ]
-}
-"""
-
-PROMPT_SINGLE_SYSTEM = """As a highly skilled AI, you will analyze the provided code diff and generate a single commit message that summarizes all the changes made. You will use the Conventional Commits guidelines as a reference, but prioritize creating a message that encompasses all changes. Do not add useless details like information about whitespace changes, newlines, the number of lines changed, etc. Return only the commit message inside a JSON object and absolutely nothing else, like in the example below:
-
-{
-    "message": "feat: Added a new feature"
-}
-
-No special characters or newlines should be provided."""
-PROMPT_SINGLE_START = """Please generate a commit message that describes all the changes made in the following diff:
-
---- Begin diff ---
-"""
-
-PROMPT_SINGLE_END = """
---- End diff ---
-"""
-
-PROMPT_CHANGELOG = """Examine the following compilation git diffs, which capture all modifications made between the most recent development version of our software and the currently released, public, production version.
-
-Your task is to interpret this data, employing critical thinking and the contextual clues surrounding the changes, to construct a comprehensive changelog intended for the end user. This changelog will serve as the centerpiece of an upcoming announcement.
-
-Approach this task methodically, scrutinizing each change to avoid any inaccuracies. Your meticulous attention to detail will help ensure the accuracy of this changelog. Return your finished changelog IN ITS ENTIRETY as a textual description, one line at a time, beginning with the most recently marked version, down to the preceding release, and ending with the original public production version.
-"""
 
 # Models and their respective token limits
 MODEL_TOKEN_LIMITS = {
