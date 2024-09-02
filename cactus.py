@@ -45,6 +45,8 @@ MODEL_TOKEN_LIMITS = {
     "gpt-4": 16384,
     "gemini-1.5-pro": 1048576,
     "gemini-1.5-flash": 1048576,
+    "gemini-1.5-pro-exp-0801": 2097152,
+    "gemini-1.5-pro-exp-0801": 2097152,
 }
 
 
@@ -134,6 +136,12 @@ def get_patches_and_prompt(diff_to_apply):
             prompt_data["files"][patched_file.path] = {
                 "content": "[BINARY FILE]"
             }
+        except FileNotFoundError:
+            logger.warning(f"File not found. This was probably renamed.")
+            prompt_data["files"][patched_file.path] = {
+                "content": "File Not Found (Probably Renamed)"
+            }
+
 
         for hunk in patched_file:
             prompt_data["hunks"].append({
