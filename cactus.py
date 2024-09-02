@@ -230,7 +230,7 @@ def num_tokens_from_string(text, model):
     try:
         encoding = tiktoken.encoding_for_model(model)
     except KeyError:
-        print("Warning: model not found. Using gpt-4-0613 encoding.")
+        # print("Warning: model not found. Using gpt-4-0613 encoding.")
         model = "gpt-4-0613"
         encoding = tiktoken.encoding_for_model(model)
 
@@ -262,7 +262,7 @@ def split_into_chunks(text, model="gpt-4o"):
 
 def generate_changelog(args, model):
     # get list of commit messages from args.sha to HEAD
-    commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.decode().split("\n")
+    commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.split("\n")
 
     # prepare exclude patterns for git diff
     pathspec = f"-- {args.pathspec}" if args.pathspec else ''
@@ -287,6 +287,15 @@ def generate_changelog(args, model):
     for chunk in chunks:
         # send request and append result to changelog
         if "gemini" in model:
+            # Create the model
+            generation_config = {
+              "temperature": 1,
+              "top_p": 0.95,
+              "top_k": 64,
+              "max_output_tokens": 8192,
+              "response_mime_type": "text/plain",
+            }
+
             gemini_model = genai.GenerativeModel(
                 model_name=model,
                 generation_config=generation_config,                                                                                                                                              # type: ignore
