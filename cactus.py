@@ -46,7 +46,6 @@ MODEL_TOKEN_LIMITS = {
     "gemini-1.5-pro": 1048576,
     "gemini-1.5-flash": 1048576,
     "gemini-1.5-pro-exp-0801": 2097152,
-    "gemini-1.5-pro-exp-0801": 2097152,
 }
 
 
@@ -301,17 +300,53 @@ def generate_changelog(args, model):
                 generation_config=generation_config,                                                                                                                                              # type: ignore
                                                                                                                                                                                                   # safety_settings=Adjust safety settings
                                                                                                                                                                                                   # See https://ai.google.dev/gemini-api/docs/safety-settings
-                system_instruction="As a highly skilled AI, you will provide me with a properly formatted changelog targeting the final user, in a list form using Markdown, and nothing else.",
+                system_instruction="""
+                You are a highly skilled AI tasked with creating a user-friendly changelog based on git diffs. Your goal is to analyze the following git diffs and produce a clear, concise list of changes that are relevant and understandable to end-users.""",
             )
-            chat_session = gemini_model.start_chat(history=[
-                {
-                    "role": "user",
-                    "parts": [
-                        f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n",
-                    ],
-                },
-            ])
-            response = chat_session.send_message("")
+            chat_session = gemini_model.start_chat()
+            response = chat_session.send_message(
+                        f"""You are tasked with generating a changelog for beta testers based on a list of commit messages and their corresponding diffs. Your goal is to create a concise, informative list of changes that is neither too technical nor too simplistic.
+
+First, review the following commit messages:
+
+<commit_messages>
+{commit_messages}
+</commit_messages>
+
+Now, examine the diffs associated with these commits:
+
+<diffs>
+{chunk}
+</diffs>
+
+To generate the changelog:
+
+1. Analyze both the commit messages and the diffs, paying more attention to the contents of the diffs. Remember that multiple changes may be grouped into a single commit.
+
+2. Identify significant changes, new features, improvements, and bug fixes that would be relevant to beta testers.
+
+3. Summarize each change in a clear, concise manner that is understandable to beta testers. Avoid overly technical jargon, but don't oversimplify to the point of losing important details.
+
+4. Prioritize changes based on their impact and relevance to the user experience.
+
+5. Combine related changes into single entries when appropriate to avoid redundancy.
+
+6. Use action verbs to start each changelog entry (e.g., "Added," "Fixed," "Improved," "Updated").
+
+7. If a change addresses a specific issue or feature request, mention it briefly without going into technical details.
+
+Generate your changelog as a markdown list. Each item in the list should be a single line describing one change or a group of related changes. Do not include any additional text, headings, or explanations outside of the list items.
+
+Your output should look like this:
+
+<changelog>
+- Added [feature] to improve [aspect of the application]
+- Fixed issue with [problem] that was causing [symptom]
+- Improved performance of [feature or section] by [brief explanation]
+- Updated [component] to enhance [functionality]
+</changelog>
+
+Remember to focus on changes that are most relevant and impactful for beta testers. Your goal is to provide them with a clear understanding of what has changed in the application with a little bit of technical details.""")
             changelog += response.text
         else:
             import openai
