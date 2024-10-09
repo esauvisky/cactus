@@ -65,7 +65,7 @@ def setup_api_key(api_type):
     api_key = input(f"Enter your {api_type} API key: ")
     config_dir = os.path.expanduser("~/.config/cactus")
     os.makedirs(config_dir, exist_ok=True)
-    with open(os.path.join(config_dir, f"{api_type.lower()}_api_key"), "w") as f:
+    with open(os.path.join(config_dir, f"{api_type.lower()}_api_key"), "w", encoding='utf-8') as f:
         f.write(api_key)
     logger.success(f"{api_type} API key saved.")
 
@@ -73,7 +73,7 @@ def setup_api_key(api_type):
 def load_api_key(api_type):
     config_dir = os.path.expanduser("~/.config/cactus")
     try:
-        with open(os.path.join(config_dir, f"{api_type.lower()}_api_key"), "r") as f:
+        with open(os.path.join(config_dir, f"{api_type.lower()}_api_key"), "r", encoding='utf-8') as f:
             api_key = f.read().strip()
         return api_key
     except FileNotFoundError:
@@ -111,7 +111,7 @@ def get_git_diff(context_size):
 
 
 def restore_changes(full_diff):
-    with open("/tmp/cactus.diff", "w") as f:
+    with open("/tmp/cactus.diff", "w", encoding='utf-8') as f:
         f.write(full_diff)
         f.write("\n")
     run("git apply --cached --unidiff-zero /tmp/cactus.diff")
@@ -126,7 +126,7 @@ def get_patches_and_prompt(diff_to_apply):
 
     for patched_file in patch_set:
         try:
-            file_contents = open(patched_file.path, "r").read()
+            file_contents = open(patched_file.path, "r", encoding='utf-8').read()
             prompt_data["files"][patched_file.path] = {
                 "content": file_contents
             }

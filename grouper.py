@@ -300,7 +300,7 @@ def stage_renames(renames):
             filename = fd.name
 
         for hunk in rename:
-            with open(filename, 'a') as fd:
+            with open(filename, 'a', encoding='utf-8') as fd:
                 # fd.write(f"--- {patched_file.source_file}\n")
                 # fd.write(f"+++ {patched_file.target_file}\n")
                 fd.write(str(hunk))
@@ -323,7 +323,7 @@ def stage_changes(hunks):
         filename = fd.name
 
     for hunk in hunks:
-        with open(filename, 'a') as fd:
+        with open(filename, 'a', encoding='utf-8') as fd:
             # fd.write(f"--- {patched_file.source_file}\n")
             # fd.write(f"+++ {patched_file.target_file}\n")
             fd.write(str(hunk))
