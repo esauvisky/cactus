@@ -176,7 +176,7 @@ def get_modified_lines(hunk):
             # replaces all special characters with space
             line = re.sub(r"[^a-zA-Z0-9\s]", " ", line)
             filtered_lines.append(line)
-    return '\n'.join(filtered_lines)
+    return os.linesep.join(filtered_lines)
 
 
 def extract_renames(git_diff):
@@ -202,8 +202,8 @@ def parse_diff(git_diff) -> List[PatchedFile]:
             patch_set = PatchSet.from_string(git_diff)
             break  # Parsing successful, break the loop
         except UnidiffParseError:
-                   # If parsing fails, add a newline and try again
-            git_diff += '\n'
+            # If parsing fails, add a newline and try again
+            git_diff += os.linesep
     return patch_set
 
 
@@ -211,7 +211,7 @@ def create_rename_hunks(renames):
     rename_hunks = []
     for old_name, new_name in renames:
         # Create a synthetic hunk string representing the rename
-        synthetic_hunk = f"--- a/{old_name}\n+++ b/{new_name}\n"
+        synthetic_hunk = f"--- a/{old_name}{os.linesep}+++ b/{new_name}{os.linesep}"
         rename_hunks.append((old_name, new_name, synthetic_hunk))
     return rename_hunks
 
@@ -284,7 +284,7 @@ def generate_rename_hunks(renames):
     for rename in renames:
         # print(rename)
         old_name, new_name = rename
-        hunk_text = f"rename from {old_name}\nrename to {new_name}\n"
+        hunk_text = f"rename from {old_name}{os.linesep}rename to {new_name}{os.linesep}"
         hunk = (None, hunk_text) # We use None to denote that it's not an actual file change
         hunks.append(hunk)
     return hunks
@@ -300,15 +300,15 @@ def stage_renames(renames):
             filename = fd.name
 
         for hunk in rename:
-            with open(filename, 'a', encoding='utf-8', newline='\n') as fd:
+            with open(filename, 'a', encoding='utf-8', newline=os.linesep) as fd:
                 # fd.write(f"--- {patched_file.source_file}\n")
                 # fd.write(f"+++ {patched_file.target_file}\n")
                 fd.write(str(hunk))
-                fd.write("\n")
+                fd.write(os.linesep)
 
         # Apply the patch file
         subprocess.run(
-            f'git apply --cached --unidiff-zero {filename}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            f'git apply --cached --ignore-whitespace --unidiff-zero {filename}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # old_name, new_name = patched_file.source_file, patched_file.target_file
         # subprocess.run(['git', 'mv', old_name, new_name], check=True)
@@ -317,7 +317,7 @@ def stage_renames(renames):
 
 def stage_changes(hunks):
     # Handle regular changes
-    with NamedTemporaryFile(mode='w', prefix='.tmp_patch_', delete=False) as fd:
+    with NamedTemporaryFile(mode='w', prefix='.tmp_patch_', delete=False, newline=os.linesep) as fd:
         logger.debug(pprint.pformat(hunks))
         filename = fd.name
         logger.debug(f"Temporary patch file created at: {filename}")
@@ -327,12 +327,12 @@ def stage_changes(hunks):
 
         # Write all hunks to the temporary file
         for hunk in hunks:
-            fd.write(str(hunk).replace("\n", os.linesep))  # Replace '\n' with the system's line separator
-            fd.write(os.linesep)  # Ensure each hunk is separated by a newline
+            fd.write(str(hunk))
+            fd.write(os.linesep)  # Ensure each hunk is separated by a newline (LF)
 
     # Apply the patch file
     subprocess.run(
-        f'git apply --cached --unidiff-zero {filename}',
+        f'git apply --cached --unidiff-zero --ignore-whitespace {filename}',
         shell=True,
         check=True,
         stdout=subprocess.PIPE,

@@ -80,7 +80,7 @@ def setup_api_key(api_type):
     api_key = input(f"Enter your {api_type} API key: ")
     config_dir = os.path.expanduser("~/.config/cactus")
     os.makedirs(config_dir, exist_ok=True)
-    with open(os.path.join(config_dir, f"{api_type.lower()}_api_key"), "w", encoding='utf-8', newline='\n') as f:
+    with open(os.path.join(config_dir, f"{api_type.lower()}_api_key"), "w", encoding='utf-8', newline=os.linesep) as f:
         f.write(api_key)
     logger.success(f"{api_type} API key saved.")
 
@@ -138,9 +138,9 @@ def get_git_diff(context_size):
 
 
 def restore_changes(full_diff):
-    with open("/tmp/cactus.diff", "w", encoding='utf-8', newline='\n') as f:
+    with open("/tmp/cactus.diff", "w", encoding='utf-8', newline=os.linesep) as f:
         f.write(full_diff)
-        f.write("\n")
+        f.write(os.linesep)
     run("git apply --cached --unidiff-zero /tmp/cactus.diff")
 
 
@@ -164,9 +164,9 @@ def get_patches_and_prompt(diff_to_apply):
 
         for hunk in patched_file:
             prompt_data["hunks"].append({"hunk_index": i, "content": str(hunk)})
-            newhunk = f"--- {patched_file.source_file}\n"
-            newhunk += f"+++ {patched_file.target_file}\n"
-            newhunk += str(hunk) + "\n"
+            newhunk = f"--- {patched_file.source_file}{os.linesep}"
+            newhunk += f"+++ {patched_file.target_file}{os.linesep}"
+            newhunk += str(hunk) + os.linesep
             patches.append(newhunk)
             i += 1
 
@@ -228,7 +228,7 @@ def get_clusters_from_gemini(prompt_data, clusters_n, model):
 def generate_commits(all_hunks, clusters, previous_sha, diff_to_apply):
     for cluster in clusters:
         hunks_in_cluster = [all_hunks[i] for i in cluster["hunk_indices"]]
-        diff = "\n".join(hunks_in_cluster)
+        diff = os.linesep.join(hunks_in_cluster)
         message = cluster["message"]
 
         try:
@@ -279,7 +279,7 @@ def split_into_chunks(text, model="gpt-4o"):
 
 def generate_changelog(args, model):
     # get list of commit messages from args.sha to HEAD
-    commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.split("\n")
+    commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.splitlines()
 
     # prepare exclude patterns for git diff
     pathspec = f"-- {args.pathspec}" if args.pathspec else ''
@@ -466,7 +466,7 @@ if __name__ == "__main__":
 
     for subparsers_action in [action for action in PARSER._actions if isinstance(action, argparse._SubParsersAction)]:
         for choice, subparser in subparsers_action.choices.items():
-            help_lines = subparser.format_help().split("\n")
+            help_lines = subparser.format_help().splitlines()
             help_lines[0] = "\n\u001b[34;01m" + help_lines[0].replace("usage: ", "")
             help_lines.pop(1)
             help_lines[1] = "\u001b[34m" + help_lines[1] + "\u001b[00m"
