@@ -8,7 +8,7 @@ __license__ = "MIT"
 
 import argparse
 import os
-import pprint
+import locale
 import time
 import json
 import subprocess
@@ -100,6 +100,9 @@ def load_api_key(api_type):
 
 
 def run(cmd):
+    # Get the correct encoding for the current platform
+    encoding = locale.getpreferredencoding(False) if sys.platform.startswith("win") else "utf-8"
+
     result = subprocess.run(
         cmd,
         shell=True,
