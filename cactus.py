@@ -97,11 +97,11 @@ def load_api_key(api_type):
 
 
 def run(cmd):
-    # Get the correct encoding for the current platform
-    encoding = (locale.getpreferredencoding(False) if sys.platform.startswith("win") else "utf-8")
+    # # Get the correct encoding for the current platform
+    # encoding = (locale.getpreferredencoding(False) if sys.platform.startswith("win") else "utf-8")
 
     logger.debug(f"Running command: {cmd}")
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding=encoding)
+    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
 
     # Decode and clean up the output
     result.stdout = result.stdout.strip()
