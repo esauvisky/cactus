@@ -159,26 +159,16 @@ def get_patches_and_prompt(diff_to_apply):
     for patched_file in patch_set:
         try:
             file_contents = open(patched_file.path, "r", encoding='utf-8').read()
-            prompt_data["files"][patched_file.path] = {
-                "content": file_contents
-            }
+            prompt_data["files"][patched_file.path] = {"content": file_contents}
         except UnicodeDecodeError:
             logger.warning(f"Failed to read file {patched_file.path}. This is probably a binary file.")
-            prompt_data["files"][patched_file.path] = {
-                "content": "[BINARY FILE]"
-            }
+            prompt_data["files"][patched_file.path] = {"content": "[BINARY FILE]"}
         except FileNotFoundError:
             logger.warning(f"File not found. This was probably renamed.")
-            prompt_data["files"][patched_file.path] = {
-                "content": "File Not Found (Probably Renamed)"
-            }
-
+            prompt_data["files"][patched_file.path] = {"content": "File Not Found (Probably Renamed)"}
 
         for hunk in patched_file:
-            prompt_data["hunks"].append({
-                "hunk_index": i,
-                "content": str(hunk)
-            })
+            prompt_data["hunks"].append({"hunk_index": i, "content": str(hunk)})
             newhunk = f"--- {patched_file.source_file}\n"
             newhunk += f"+++ {patched_file.target_file}\n"
             newhunk += str(hunk) + "\n"
@@ -203,8 +193,9 @@ def get_clusters_from_openai(prompt_data, clusters_n, model):
                 "role": "user", "content": prompt_data
             },
             {
-                "role": "user", "content": f"Return a JSON with {clusters_n} commits for the hunks above."
-                                         if clusters_n else "Return the JSON for the hunks above."
+                "role": "user",
+                "content": f"Return a JSON with {clusters_n} commits for the hunks above."
+                           if clusters_n else "Return the JSON for the hunks above."
             },
         ])
     content = json.loads(response.choices[0].message.content) # type: ignore
