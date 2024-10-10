@@ -265,7 +265,7 @@ def split_into_chunks(text, model="gpt-4o"):
     """
     Split the text into chunks of the specified size.
     """
-    tokens = text.split('\n')
+    tokens = text.splitlines()
     chunks = []
     chunk = ''
     for token in tokens:
