@@ -202,7 +202,7 @@ def parse_diff(git_diff) -> List[PatchedFile]:
             patch_set = PatchSet.from_string(git_diff)
             break  # Parsing successful, break the loop
         except UnidiffParseError:
-            # If parsing fails, add a newline and try again
+                   # If parsing fails, add a newline and try again
             git_diff += '\n'
     return patch_set
 
@@ -318,17 +318,22 @@ def stage_renames(renames):
 def stage_changes(hunks):
     # Handle regular changes
     with NamedTemporaryFile(mode='w', prefix='.tmp_patch_', delete=False) as fd:
-        # pprint.pprint(hunks)
-        # No need to join on patch_info since it's a string already included in the hunk data
+        logger.debug(pprint.pformat(hunks))
         filename = fd.name
+        logger.debug("Temporary patch file created at: %s", filename)
 
-    for hunk in hunks:
-        with open(filename, 'a', encoding='utf-8', newline='\n') as fd:
-            # fd.write(f"--- {patched_file.source_file}\n")
-            # fd.write(f"+++ {patched_file.target_file}\n")
+        # Log the hunks for debugging purposes
+        logger.debug("Hunks to be applied:\n%s", pprint.pformat(hunks))
+
+        # Write all hunks to the temporary file
+        for hunk in hunks:
             fd.write(str(hunk))
-            fd.write("\n")
+            fd.write("\n") # Ensure each hunk is separated by a newline
 
     # Apply the patch file
     subprocess.run(
-        f'git apply --cached --unidiff-zero {filename}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        f'git apply --cached --unidiff-zero {filename}',
+        shell=True,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)

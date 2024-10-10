@@ -462,7 +462,9 @@ if __name__ == "__main__":
     args = PARSER.parse_args()
 
     setup_logging("INFO")
-    # setup_logging("DEBUG")
+
+    if args.debug:
+        setup_logging("DEBUG")
 
     if args.action == "setup":
         setup_api_key(args.api)
