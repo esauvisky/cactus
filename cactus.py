@@ -315,15 +315,14 @@ def generate_changelog(args, model):
 
             gemini_model = genai.GenerativeModel(
                 model_name=model,
-                generation_config=generation_config,                                                                                                                                              # type: ignore
-                                                                                                                                                                                                  # safety_settings=Adjust safety settings
-                                                                                                                                                                                                  # See https://ai.google.dev/gemini-api/docs/safety-settings
+                generation_config=generation_config,                                                                                                                                                                                                                                                      # type: ignore
+                                                                                                                                                                                                                                                                                                          # safety_settings=Adjust safety settings
+                                                                                                                                                                                                                                                                                                          # See https://ai.google.dev/gemini-api/docs/safety-settings
                 system_instruction="""
                 You are a highly skilled AI tasked with creating a user-friendly changelog based on git diffs. Your goal is to analyze the following git diffs and produce a clear, concise list of changes that are relevant and understandable to end-users.""",
             )
             chat_session = gemini_model.start_chat()
-            response = chat_session.send_message(
-                        f"""You are tasked with generating a changelog for beta testers based on a list of commit messages and their corresponding diffs. Your goal is to create a concise, informative list of changes that is neither too technical nor too simplistic.
+            response = chat_session.send_message(f"""You are tasked with generating a changelog for beta testers based on a list of commit messages and their corresponding diffs. Your goal is to create a concise, informative list of changes that is neither too technical nor too simplistic.
 
 First, review the following commit messages:
 
@@ -383,10 +382,10 @@ Remember to focus on changes that are most relevant and impactful for beta teste
                     {
                         "role": "user",
                         "content": f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n"
-                                                                                                                                                                                                  # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
+                                                                                                                                                                                                                                                                                                          # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
                     },
                 ])
-            changelog += response.choices[0].message.content                                                                                                                                      # type: ignore
+            changelog += response.choices[0].message.content                                                                                                                                                                                                                                              # type: ignore
 
     logger.info(f"{changelog}")
 
@@ -478,7 +477,6 @@ if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1].isdigit():
         sys.argv.insert(1, "generate")
     args = PARSER.parse_args()
-
 
     if args.debug:
         setup_logging("DEBUG", {"function": True})
