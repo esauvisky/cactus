@@ -50,6 +50,7 @@ MODEL_TOKEN_LIMITS = {
 
 from loguru import logger
 
+
 def setup_logging(log_lvl="DEBUG", options={}):
     file = options.get("file", False)
     function = options.get("function", False)
@@ -310,11 +311,11 @@ def generate_changelog(args, model):
         if "gemini" in model:
             # Create the model
             generation_config = {
-              "temperature": 1,
-              "top_p": 0.95,
-              "top_k": 64,
-              "max_output_tokens": 8192,
-              "response_mime_type": "text/plain",
+                "temperature": 1,
+                "top_p": 0.95,
+                "top_k": 64,
+                "max_output_tokens": 8192,
+                "response_mime_type": "text/plain",
             }
 
             gemini_model = genai.GenerativeModel(
