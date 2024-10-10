@@ -109,9 +109,13 @@ def run(cmd):
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        encoding=encoding
     )
-    result.stdout = result.stdout.decode("utf-8").strip() # type: ignore
-    result.stderr = result.stderr.decode("utf-8").strip() # type: ignore
+
+    # Decode and clean up the output
+    result.stdout = result.stdout.strip()
+    result.stderr = result.stderr.strip()
+
     return result
 
 
@@ -119,17 +123,22 @@ def get_git_diff(context_size):
     # Check if there are staged changes
     result = run("git diff --cached --quiet --exit-code")
     if result.returncode == 0:
-        # There are not staged changes
+        # No staged changes
         logger.error("No staged changes found, please stage the desired changes.")
         sys.exit(1)
 
+    # Command to get the staged diff
     cmd = f"git diff --inter-hunk-context={context_size} --unified={context_size} --minimal -p --staged"
     result = run(cmd)
     if result.returncode != 0:
-        logger.error("Failed to get git diff: %s", result.stderr.decode().strip())
+        logger.error(f"Failed to get git diff: {result.stderr}")
         sys.exit(1)
-    diff_to_apply = result.stdout
 
+    # Handle CRLF warnings
+    if "CRLF" in result.stderr:
+        logger.warning("Warning: Line endings (CRLF vs LF) may cause issues. Consider configuring Git properly.")
+
+    diff_to_apply = result.stdout
     return diff_to_apply
 
 
