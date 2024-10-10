@@ -198,140 +198,23 @@ def parse_diff(git_diff) -> List[PatchedFile]:
     return patch_set
 
 
-def create_rename_hunks(renames):
-    rename_hunks = []
-    for old_name, new_name in renames:
-        # Create a synthetic hunk string representing the rename
-        synthetic_hunk = f"--- a/{old_name}{os.linesep}+++ b/{new_name}{os.linesep}"
-        rename_hunks.append((old_name, new_name, synthetic_hunk))
-    return rename_hunks
+def create_patch_content(hunks, message):
+    from cactus import run  # Import run function from cactus
+    import time
+    name = run('git config user.name').stdout.strip()
+    email = run('git config user.email').stdout.strip()
+    date = time.strftime('%a, %d %b %Y %H:%M:%S %z', time.localtime())
+    hash = '0000000000000000000000000000000000000000'
 
+    headers = f"""From {hash} {date}
+From: {name} <{email}>
+Date: {date}
+Subject: [PATCH] {message}
 
-def group_hunks(git_diff, n_clusters, affinity_threshold):
-    # Parse hunks from the git_diff
-    patch_set = parse_diff(git_diff)
-    hunks = [(patched_file, str(hunk)) for patched_file in patch_set for hunk in patched_file]
+{message}
 
-    # for hunk in hunks:
-    #     print(str(hunk))
-    #     print()
-
-    # import sys
-    # sys.exit(1)
-
-    if len(hunks) < 2:
-        return {0: hunks}
-
-    # Get the most common words in the hunks
-    most_common_words = get_optimal_n_common_words([hunk for _, hunk in hunks])
-    logger.debug("Most common words: {}".format(most_common_words))
-
-    # Calculate the similarity matrix
-    matrix = similarity_matrix([get_modified_lines(h[1]) for h in hunks], stop_words=most_common_words)
-
-    # Perform clustering using AgglomerativeClustering
-    if n_clusters:
-        clustering = AgglomerativeClustering(n_clusters=n_clusters, metric="precomputed", linkage="average")
-    else:
-        clustering = AgglomerativeClustering(
-            n_clusters=None, metric="precomputed", linkage="average", distance_threshold=1 - affinity_threshold)
-    clustering.fit(1 - matrix)
-
-    # Create clusters of hunks
-    clusters = {}
-    for idx, label in enumerate(clustering.labels_):
-        if label not in clusters:
-            clusters[label] = []
-        clusters[label].append(hunks[idx])
-
-    return clusters
-
-
-def embed_hunks(embed, hunks):
-    hunk_texts = [str(hunk) for hunk in hunks]
-    return embed(hunk_texts).numpy()
-
-
-def cluster_embeddings(embeddings: np.ndarray, threshold: float = 0.2):
-    distance_matrix = 1 - np.inner(embeddings, embeddings)
-    linkage = hierarchy.linkage(distance_matrix, 'complete')
-    clusters = hierarchy.fcluster(linkage, 1 - threshold, 'distance')
-    return clusters
-
-
-def group_hunks_by_cluster(hunks, clusters):
-    grouped_hunks = {}
-    for hunk, cluster in zip(hunks, clusters):
-        if cluster not in grouped_hunks:
-            grouped_hunks[cluster] = []
-        grouped_hunks[cluster].append(hunk)
-    return grouped_hunks
-
-
-# Assuming that renames are a list of tuples with (old_name, new_name)
-def generate_rename_hunks(renames):
-    # We simulate a hunk with the renaming information
-    hunks = []
-    for rename in renames:
-        # print(rename)
-        old_name, new_name = rename
-        hunk_text = f"rename from {old_name}{os.linesep}rename to {new_name}{os.linesep}"
-        hunk = (None, hunk_text) # We use None to denote that it's not an actual file change
-        hunks.append(hunk)
-    return hunks
-
-
-def stage_renames(renames):
-    # Use git mv to handle renames and stage them
-    for rename in renames:
-        # Handle regular changes
-        with NamedTemporaryFile(mode='w', prefix='.tmp_patch_', delete=False) as fd:
-            # pprint.pprint(hunks)
-            # No need to join on patch_info since it's a string already included in the hunk data
-            filename = fd.name
-
-        for hunk in rename:
-            with open(filename, 'a', encoding='utf-8', newline=os.linesep) as fd:
-                # fd.write(f"--- {patched_file.source_file}\n")
-                # fd.write(f"+++ {patched_file.target_file}\n")
-                fd.write(str(hunk))
-                fd.write(os.linesep)
-
-        # Apply the patch file
-        subprocess.run(
-            f'git apply --cached --ignore-whitespace --unidiff-zero {filename}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        # old_name, new_name = patched_file.source_file, patched_file.target_file
-        # subprocess.run(['git', 'mv', old_name, new_name], check=True)
-        # subprocess.run(['git', 'add', new_name], check=True)
-
-
-def stage_changes(hunks):
-    # Handle regular changes
-    with NamedTemporaryFile(mode='w', prefix='.tmp_patch_', delete=False, newline='\n') as fd:
-        logger.debug(pprint.pformat(hunks))
-        filename = fd.name
-        logger.debug(f"Temporary patch file created at: {filename}")
-
-        # Log the hunks for debugging purposes
-        logger.debug(f"Hunks to be applied:\n{pprint.pformat(hunks)}")
-
-        # Write all hunks to the temporary file
-        for hunk in hunks:
-            # Normalize line endings to LF
-            normalized_hunk = str(hunk).replace('\r\n', '\n')
-            fd.write(normalized_hunk)
-            fd.write('\n')  # Ensure each hunk is separated by a newline (LF)
-
-    # Apply the patch file
-    result = subprocess.run(
-        f'git apply --cached --unidiff-zero --ignore-whitespace --ignore-space-at-eol {filename}',
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-
-    # Clean up the temporary file
-    if logger.level != "DEBUG":
-        os.unlink(filename)
+---
+"""
+    diff_content = ''.join(hunks)
+    patch_content = headers + '\n' + diff_content
+    return patch_content
