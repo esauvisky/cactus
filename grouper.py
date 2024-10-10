@@ -1,25 +1,17 @@
 from typing import List
 import os
-import pprint
 import re
-import shlex
 import subprocess
 from collections import Counter
-from tempfile import NamedTemporaryFile
 
-import matplotlib.pyplot as plt
 import numpy as np
 from loguru import logger
 from scipy.cluster import hierarchy
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import cosine_similarity
 from thefuzz import fuzz
-from unidiff import Hunk, PatchedFile, PatchSet, UnidiffParseError
-
-import re
-from collections import Counter
+from unidiff import PatchedFile, PatchSet, UnidiffParseError
 
 # List of common programming language reserved words to exclude (example for Python)
 RESERVED_WORDS = set([
@@ -182,7 +174,6 @@ def get_modified_lines(hunk):
 def extract_renames(git_diff):
     patch_set = parse_diff(git_diff)
 
-    # hunks = [(patched_file, str(hunk)) for patched_file in patch_set for hunk in patched_file]
     renames = []
     clean_diff = []
 
