@@ -224,7 +224,7 @@ def get_clusters_from_gemini(prompt_data, clusters_n, model):
 def generate_commits(all_hunks, clusters, previous_sha, diff_to_apply):
     patch_files = []
     try:
-        with tempfile.TemporaryDirectory(delete=logger.level != "DEBUG") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             logger.debug(f"Temporary directory created at: {temp_dir}")
             # Create all patch files
             for idx, cluster in enumerate(clusters):
