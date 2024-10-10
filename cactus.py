@@ -57,13 +57,8 @@ def setup_logging(log_lvl="DEBUG", options={}):
     process = options.get("process", False)
     thread = options.get("thread", False)
 
-    log_fmt = (u"<n><d><level>{time:HH:mm:ss.SSS} | " +
-               f"{'{file:>15.15}' if file else ''}" +
-               f"{'{function:>15.15}' if function else ''}" +
-               f"{':{line:<4} | ' if file or function else ''}" +
-               f"{'{process.name:>12.12} | ' if process else ''}" +
-               f"{'{thread.name:<11.11} | ' if thread else ''}" +
-               u"{level:1.1} | </level></d></n><level>{message}</level>")
+    log_fmt = (u"<n><d><level>{time:HH:mm:ss.SSS} | " + f"{'{file:>15.15}' if file else ''}" + f"{'{function:>15.15}' if function else ''}" + f"{':{line:<4} | ' if file or function else ''}"
+               + f"{'{process.name:>12.12} | ' if process else ''}" + f"{'{thread.name:<11.11} | ' if thread else ''}" + u"{level:1.1} | </level></d></n><level>{message}</level>")
 
     logger.configure(
         handlers=[{

@@ -320,15 +320,15 @@ def stage_changes(hunks):
     with NamedTemporaryFile(mode='w', prefix='.tmp_patch_', delete=False) as fd:
         logger.debug(pprint.pformat(hunks))
         filename = fd.name
-        logger.debug("Temporary patch file created at: %s", filename)
+        logger.debug(f"Temporary patch file created at: {filename}")
 
         # Log the hunks for debugging purposes
-        logger.debug("Hunks to be applied:\n%s", pprint.pformat(hunks))
+        logger.debug(f"Hunks to be applied:\n{pprint.pformat(hunks)}")
 
         # Write all hunks to the temporary file
         for hunk in hunks:
-            fd.write(str(hunk))
-            fd.write("\n") # Ensure each hunk is separated by a newline
+            fd.write(str(hunk).replace("\n", os.linesep))  # Replace '\n' with the system's line separator
+            fd.write(os.linesep)  # Ensure each hunk is separated by a newline
 
     # Apply the patch file
     subprocess.run(
