@@ -48,18 +48,37 @@ MODEL_TOKEN_LIMITS = {
     "gemini-1.5-pro-exp-0801": 2097152,
 }
 
+from loguru import logger
 
-def setup_logging(level="DEBUG", show_module=False):
-    """
-    Setups better log format for loguru
-    """
-    logger.remove(0)    # Remove the default logger
-    log_level = level
-    log_fmt = u"<green>["
-    log_fmt += u"{file:10.10}…:{line:<3} | " if show_module else ""
-    log_fmt += u"{time:HH:mm:ss.SSS}]</green> <level>{level: <8}</level> | <level>{message}</level>"
-    logger.add(sys.stderr, level=log_level, format=log_fmt, colorize=True, backtrace=True, diagnose=True)
+def setup_logging(log_lvl="DEBUG", options={}):
+    file = options.get("file", False)
+    function = options.get("function", False)
+    process = options.get("process", False)
+    thread = options.get("thread", False)
 
+    log_fmt = (u"<n><d><level>{time:HH:mm:ss.SSS} | " +
+               f"{'{file:>15.15}' if file else ''}" +
+               f"{'{function:>15.15}' if function else ''}" +
+               f"{':{line:<4} | ' if file or function else ''}" +
+               f"{'{process.name:>12.12} | ' if process else ''}" +
+               f"{'{thread.name:<11.11} | ' if thread else ''}" +
+               u"{level:1.1} | </level></d></n><level>{message}</level>")
+
+    logger.configure(
+        handlers=[{
+            "sink": lambda x: print(x, end=""),
+            "level": log_lvl,
+            "format": log_fmt,
+            "colorize": True,
+            "backtrace": True,
+            "diagnose": True
+        }],
+        levels=[
+            {"name": "TRACE", "color": "<white><dim>"},
+            {"name": "DEBUG", "color": "<cyan><dim>"},
+            {"name": "INFO", "color": "<white>"}
+        ]
+    )  # type: ignore # yapf: disable
 
 def setup_api_key(api_type):
     api_key = input(f"Enter your {api_type} API key: ")
@@ -461,10 +480,11 @@ if __name__ == "__main__":
         sys.argv.insert(1, "generate")
     args = PARSER.parse_args()
 
-    setup_logging("INFO")
 
     if args.debug:
-        setup_logging("DEBUG")
+        setup_logging("DEBUG", {"function": True})
+    else:
+        setup_logging("INFO")
 
     if args.action == "setup":
         setup_api_key(args.api)
