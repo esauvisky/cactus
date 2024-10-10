@@ -334,7 +334,7 @@ def stage_changes(hunks):
 
     # Apply the patch file
     result = subprocess.run(
-        f'git apply --cached --unidiff-zero --ignore-whitespace --ignore-space-at-eol {filename}',
+        f'git apply --cached --unidiff-zero --ignore-whitespace --ignore-space-at-eol --whitespace=fix {filename}',
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

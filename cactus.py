@@ -97,14 +97,14 @@ def load_api_key(api_type):
 
 def run(cmd):
     # Get the correct encoding for the current platform
-    encoding = locale.getpreferredencoding(False) if sys.platform.startswith("win") else "utf-8"
+    # encoding = locale.getpreferredencoding(False) if sys.platform.startswith("win") else "utf-8"
 
     result = subprocess.run(
         cmd,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        encoding=encoding
+        encoding='utf-8'
     )
 
     # Decode and clean up the output
@@ -141,7 +141,7 @@ def restore_changes(full_diff):
     with open("/tmp/cactus.diff", "w", encoding='utf-8', newline=os.linesep) as f:
         f.write(full_diff)
         f.write(os.linesep)
-    run("git apply --cached --unidiff-zero /tmp/cactus.diff")
+    run("git apply --cached --unidiff-zero --ignore-whitespace --ignore-space-at-eol --whitespace=fix /tmp/cactus.diff")
 
 
 def get_patches_and_prompt(diff_to_apply):
