@@ -317,7 +317,7 @@ def stage_renames(renames):
 
 def stage_changes(hunks):
     # Handle regular changes
-    with NamedTemporaryFile(mode='w', prefix='.tmp_patch_', delete=False, newline=os.linesep) as fd:
+    with NamedTemporaryFile(mode='w', prefix='.tmp_patch_', delete=False, newline='\n') as fd:
         logger.debug(pprint.pformat(hunks))
         filename = fd.name
         logger.debug(f"Temporary patch file created at: {filename}")
@@ -327,13 +327,20 @@ def stage_changes(hunks):
 
         # Write all hunks to the temporary file
         for hunk in hunks:
-            fd.write(str(hunk))
-            fd.write(os.linesep)  # Ensure each hunk is separated by a newline (LF)
+            # Normalize line endings to LF
+            normalized_hunk = str(hunk).replace('\r\n', '\n')
+            fd.write(normalized_hunk)
+            fd.write('\n')  # Ensure each hunk is separated by a newline (LF)
 
     # Apply the patch file
-    subprocess.run(
-        f'git apply --cached --unidiff-zero --ignore-whitespace {filename}',
+    result = subprocess.run(
+        f'git apply --cached --unidiff-zero --ignore-whitespace --ignore-space-at-eol {filename}',
         shell=True,
-        check=True,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE)
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    # Clean up the temporary file
+    if logger.level != "DEBUG":
+        os.unlink(filename)
