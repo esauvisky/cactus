@@ -13,6 +13,7 @@ import time
 import json
 import subprocess
 import sys
+import tempfile    # Added for temporary directory handling
 
 import openai
 from loguru import logger
@@ -34,7 +35,7 @@ gemini_config = {
     "max_output_tokens": 1024,
     "response_mime_type": "application/json",
 }
-from grouper import parse_diff, stage_changes
+from grouper import parse_diff, create_patch_content # Updated import
 
 # Models and their respective token limits
 MODEL_TOKEN_LIMITS = {
@@ -97,15 +98,10 @@ def load_api_key(api_type):
 
 def run(cmd):
     # Get the correct encoding for the current platform
-    encoding = locale.getpreferredencoding(False) if sys.platform.startswith("win") else "utf-8"
+    encoding = (locale.getpreferredencoding(False) if sys.platform.startswith("win") else "utf-8")
 
-    result = subprocess.run(
-        cmd,
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        encoding=encoding
-    )
+    logger.debug(f"Running command: {cmd}")
+    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding=encoding)
 
     # Decode and clean up the output
     result.stdout = result.stdout.strip()
@@ -138,7 +134,7 @@ def get_git_diff(context_size):
 
 
 def restore_changes(full_diff):
-    with open("/tmp/cactus.diff", "w", encoding='utf-8', newline=os.linesep) as f:
+    with open("/tmp/cactus.diff", "w", encoding="utf-8", newline=os.linesep) as f:
         f.write(full_diff)
         f.write(os.linesep)
     run("git apply --cached --unidiff-zero /tmp/cactus.diff")
@@ -153,7 +149,7 @@ def get_patches_and_prompt(diff_to_apply):
 
     for patched_file in patch_set:
         try:
-            file_contents = open(patched_file.path, "r", encoding='utf-8').read()
+            file_contents = open(patched_file.path, "r", encoding="utf-8").read()
             prompt_data["files"][patched_file.path] = {"content": file_contents}
         except UnicodeDecodeError:
             logger.warning(f"Failed to read file {patched_file.path}. This is probably a binary file.")
@@ -226,20 +222,40 @@ def get_clusters_from_gemini(prompt_data, clusters_n, model):
 
 
 def generate_commits(all_hunks, clusters, previous_sha, diff_to_apply):
-    for cluster in clusters:
-        hunks_in_cluster = [all_hunks[i] for i in cluster["hunk_indices"]]
-        diff = os.linesep.join(hunks_in_cluster)
-        message = cluster["message"]
+    patch_files = []
+    try:
+        with tempfile.TemporaryDirectory(delete=logger.level != "DEBUG") as temp_dir:
+            logger.debug(f"Temporary directory created at: {temp_dir}")
+            # Create all patch files
+            for idx, cluster in enumerate(clusters):
+                hunks_in_cluster = [all_hunks[i] for i in cluster["hunk_indices"]]
+                message = cluster["message"]
 
-        try:
-            stage_changes(hunks_in_cluster)
-            logger.info(f"Auto-commiting: {message}")
-            run(f"git commit -m '{message}'")
-        except Exception as e:
-            logger.error(f"Failed to stage changes: {e}. Will restore the changes and exit.")
-            run(f"git reset {previous_sha}")
-            restore_changes(diff_to_apply)
-            sys.exit(1)
+                # Create patch content
+                patch_content = create_patch_content(hunks_in_cluster, message)
+                # Write to temporary file
+                patch_file_name = os.path.join(temp_dir, f"patch_{idx}.patch")
+                with open(patch_file_name, "w", encoding="utf-8", newline="\n") as patch_file:
+                    patch_file.write(patch_content)
+                logger.debug(f"Patch file created at: {patch_file_name}")
+                patch_files.append(patch_file_name)
+
+            # Reset the index and working directory
+            logger.info("Resetting working directory and index to clean state...")
+            run("git reset --hard")
+
+            # Apply patches using git am
+            logger.info("Applying patches with git am...")
+            result = run(f'git am {" ".join(patch_files)}')
+            if result.returncode != 0:
+                raise Exception(f'git am failed: {result.stderr}')
+
+    except Exception as e:
+        logger.exception(f"Failed to apply patches: {e}. Will restore the changes and exit.")
+        run("git am --abort")
+        run(f"git reset {previous_sha}")
+        restore_changes(diff_to_apply)
+        sys.exit(1)
 
 
 def num_tokens_from_string(text, model):
@@ -316,8 +332,6 @@ def generate_changelog(args, model):
             gemini_model = genai.GenerativeModel(
                 model_name=model,
                 generation_config=generation_config,                                                                                                                                                                                                                                                      # type: ignore
-                                                                                                                                                                                                                                                                                                          # safety_settings=Adjust safety settings
-                                                                                                                                                                                                                                                                                                          # See https://ai.google.dev/gemini-api/docs/safety-settings
                 system_instruction="""
                 You are a highly skilled AI tasked with creating a user-friendly changelog based on git diffs. Your goal is to analyze the following git diffs and produce a clear, concise list of changes that are relevant and understandable to end-users.""",
             )
@@ -411,9 +425,8 @@ def generate_changes(args, model):
         logger.error("Aborted by user.")
         sys.exit(1)
 
-    # unstage all staged changes
-    logger.warning("Unstaging all staged changes and applying individual diffs...")
-    run("git restore --staged .")
+    # Apply patches using git am
+    logger.warning("Creating patches and resetting working directory...")
     time.sleep(1)
 
     generate_commits(patches, clusters, previous_sha, diff_to_apply)
