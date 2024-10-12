@@ -32,37 +32,25 @@ def get_patches_and_prompt(diff_to_apply):
 
     for patched_file in patch_set:
         try:
-            file_contents = open(patched_file.path, "r", encoding="utf-8").read()
-            prompt_data["files"][patched_file.path] = {"content": file_contents}
-        except UnicodeDecodeError:
-            logger.warning(f"Failed to read file {patched_file.path}. This is probably a binary file.")
-            prompt_data["files"][patched_file.path] = {"content": "[BINARY FILE]"}
-        except FileNotFoundError:
-            logger.warning(f"File not found. This was probably renamed.")
-            prompt_data["files"][patched_file.path] = {"content": "File Not Found (Probably Renamed)"}
+            prompt_data["files"][patched_file.path] = {"content": open(patched_file.path, "r", encoding="utf-8").read()}
+        except (UnicodeDecodeError, FileNotFoundError) as e:
+            logger.warning(f"Failed to read file {patched_file.path}: {str(e)}")
+            prompt_data["files"][patched_file.path] = {"content": "[BINARY FILE]" if isinstance(e, UnicodeDecodeError) else "File Not Found (Probably Renamed)"}
 
         for hunk in patched_file:
             prompt_data["hunks"].append({"hunk_index": i, "content": str(hunk)})
-            newhunk = f"--- {patched_file.source_file}{os.linesep}"
-            newhunk += f"+++ {patched_file.target_file}{os.linesep}"
-            newhunk += str(hunk) + os.linesep
-            patches.append(newhunk)
+            patches.append(f"--- {patched_file.source_file}{os.linesep}+++ {patched_file.target_file}{os.linesep}{str(hunk)}{os.linesep}")
             i += 1
 
     return patches, json.dumps(prompt_data)
 
 
 def generate_commits(all_hunks, clusters, previous_sha, diff_to_apply):
-    for idx, cluster in enumerate(clusters):
-        hunks_in_cluster = [all_hunks[i] for i in cluster["hunk_indices"]]
-        message = cluster["message"]
-
-        try:
-            stage_changes(hunks_in_cluster)
-            logger.info(f"Auto-commiting: {message}")
-            run(f"git commit -m '{message}'")
-        except Exception as e:
-            logger.error(f"Failed to stage changes: {e}. Will restore the changes and exit.")
+    for cluster in clusters:
+        stage_changes([all_hunks[i] for i in cluster["hunk_indices"]])
+        logger.info(f"Auto-committing: {cluster['message']}")
+        if run(f"git commit -m '{cluster['message']}'").returncode != 0:
+            logger.error("Failed to commit changes. Restoring changes.")
             run(f"git reset {previous_sha}")
             restore_changes(diff_to_apply)
             sys.exit(1)
