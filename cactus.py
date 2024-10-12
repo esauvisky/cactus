@@ -21,45 +21,105 @@ from changelog import generate_changelog
 from utils import setup_logging
 from git_utils import run, get_git_diff, restore_changes, parse_diff, stage_changes
 from grouper import parse_diff, stage_changes
+import os
+import re
+import json
+from unidiff import PatchSet
+from loguru import logger
 
 
-def get_patches_and_prompt(diff_to_apply):
-    patch_set = parse_diff(diff_to_apply)
-
-    i = 0
+def extract_patches(diff_data):
+    """
+    Extracts individual hunks from the diff data and returns a list of binary patches.
+    """
+    diff_text = diff_data.decode('latin-1')
     patches = []
-    prompt_data = {"files": {}, "hunks": []}
+
+    try:
+        patch_set = PatchSet.from_string(diff_text)
+    except Exception as e:
+        logger.error(f"Failed to parse diff data: {e}")
+        return []
 
     for patched_file in patch_set:
-        try:
-            prompt_data["files"][patched_file.path] = {"content": open(patched_file.path, "r", encoding="utf-8").read()}
-        except (UnicodeDecodeError, FileNotFoundError) as e:
-            logger.warning(f"Failed to read file {patched_file.path}: {str(e)}")
-            prompt_data["files"][patched_file.path] = {"content": "[BINARY FILE]" if isinstance(e, UnicodeDecodeError) else "File Not Found (Probably Renamed)"}
+        if patched_file.is_binary_file:
+            logger.warning(f"Skipping binary file {patched_file.path}")
+            continue    # Skip binary files
+
+        file_headers = []
+        # Build file headers
+        file_headers.append(f'diff --git a/{patched_file.source_file} b/{patched_file.target_file}')
+        if patched_file.is_rename:
+            file_headers.append(f'rename from {patched_file.source_file}')
+            file_headers.append(f'rename to {patched_file.target_file}')
+        else:
+            # if patched_file.source_revision and patched_file.target_revision:
+            #     file_headers.append(f'index 000000..000000 {patched_file.source_mode}')
+            if patched_file.source_file and patched_file.target_file:
+                file_headers.append(f'--- {patched_file.source_file}')
+                file_headers.append(f'+++ {patched_file.target_file}')
+
+        file_header_text = '\n'.join(file_headers) + '\n'
 
         for hunk in patched_file:
-            prompt_data["hunks"].append({"hunk_index": i, "content": str(hunk)})
-            patches.append(f"--- {patched_file.source_file}{os.linesep}+++ {patched_file.target_file}{os.linesep}{str(hunk)}{os.linesep}")
-            i += 1
+            hunk_text = str(hunk)
+            patch_text = file_header_text + hunk_text
+            patch_bytes = patch_text.encode('latin-1')
+            patches.append(patch_bytes)
 
-    return patches, json.dumps(prompt_data)
+    return patches
 
 
-def generate_commits(all_hunks, clusters, previous_sha, diff_to_apply):
+def prepare_prompt_data(diff_data):
+    """
+    Prepares the prompt data for the language model from the diff data.
+    """
+    diff_text = diff_data.decode('latin-1')
+    prompt_data = {"files": {}, "hunks": []}
+    hunk_index = 0
+
+    try:
+        patch_set = PatchSet.from_string(diff_text)
+    except Exception as e:
+        logger.error(f"Failed to parse diff data: {e}")
+        return json.dumps(prompt_data)
+
+    for patched_file in patch_set:
+        file_path = patched_file.path
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except (UnicodeDecodeError, FileNotFoundError) as e:
+            logger.warning(f"Failed to read file {file_path}: {str(e)}")
+            content = "[BINARY FILE]" if isinstance(e, UnicodeDecodeError) else "File Not Found (Probably Renamed)"
+        prompt_data["files"][file_path] = {"content": content}
+
+        for hunk in patched_file:
+            hunk_content = str(hunk)
+            # Decode hunk content for the language model, replacing errors
+            hunk_content_decoded = hunk_content.encode('latin-1').decode('utf-8', errors='replace')
+            prompt_data["hunks"].append({"hunk_index": hunk_index, "content": hunk_content_decoded})
+            hunk_index += 1
+
+    return json.dumps(prompt_data)
+
+
+def generate_commits(all_hunks, clusters, previous_sha, full_diff):
     for cluster in clusters:
         stage_changes([all_hunks[i] for i in cluster["hunk_indices"]])
         logger.info(f"Auto-committing: {cluster['message']}")
         if run(f"git commit -m '{cluster['message']}'").returncode != 0:
             logger.error("Failed to commit changes. Restoring changes.")
             run(f"git reset {previous_sha}")
-            restore_changes(diff_to_apply)
+            restore_changes(full_diff)
             sys.exit(1)
 
 
 def generate_changes(args, model):
     previous_sha = run("git rev-parse --short HEAD").stdout
-    diff_to_apply = get_git_diff(args.context_size)
-    patches, prompt_data = get_patches_and_prompt(diff_to_apply)
+    full_diff = get_git_diff(args.context_size)
+    patches = extract_patches(full_diff)
+    prompt_data = prepare_prompt_data(full_diff)
 
     if "gemini" in model:
         clusters = get_clusters_from_gemini(prompt_data, args.n, model)
