@@ -222,40 +222,19 @@ def get_clusters_from_gemini(prompt_data, clusters_n, model):
 
 
 def generate_commits(all_hunks, clusters, previous_sha, diff_to_apply):
-    patch_files = []
-    try:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            logger.debug(f"Temporary directory created at: {temp_dir}")
-            # Create all patch files
-            for idx, cluster in enumerate(clusters):
-                hunks_in_cluster = [all_hunks[i] for i in cluster["hunk_indices"]]
-                message = cluster["message"]
+    for idx, cluster in enumerate(clusters):
+        hunks_in_cluster = [all_hunks[i] for i in cluster["hunk_indices"]]
+        message = cluster["message"]
 
-                # Create patch content
-                patch_content = create_patch_content(hunks_in_cluster, message)
-                # Write to temporary file
-                patch_file_name = os.path.join(temp_dir, f"patch_{idx}.patch")
-                with open(patch_file_name, "w", encoding="utf-8", newline="\n") as patch_file:
-                    patch_file.write(patch_content)
-                logger.debug(f"Patch file created at: {patch_file_name}")
-                patch_files.append(patch_file_name)
-
-            # Reset the index and working directory
-            logger.info("Resetting working directory and index to clean state...")
-            run("git reset --hard")
-
-            # Apply patches using git am
-            logger.info("Applying patches with git am...")
-            result = run(f'git am {" ".join(patch_files)}')
-            if result.returncode != 0:
-                raise Exception(f'git am failed: {result.stderr}')
-
-    except Exception as e:
-        logger.exception(f"Failed to apply patches: {e}. Will restore the changes and exit.")
-        run("git am --abort")
-        run(f"git reset {previous_sha}")
-        restore_changes(diff_to_apply)
-        sys.exit(1)
+        try:
+            stage_changes(hunks_in_cluster)
+            logger.info(f"Auto-commiting: {message}")
+            run(f"git commit -m '{message}'")
+        except Exception as e:
+            logger.error(f"Failed to stage changes: {e}. Will restore the changes and exit.")
+            run(f"git reset {previous_sha}")
+            restore_changes(diff_to_apply)
+            sys.exit(1)
 
 
 def num_tokens_from_string(text, model):
@@ -267,21 +246,21 @@ def num_tokens_from_string(text, model):
         model = "gpt-4-0613"
         encoding = tiktoken.encoding_for_model(model)
 
-    tokens_per_message = 4 # every message follows <|start|>{role/name}\n{content}<|end|>\n
-    tokens_per_name = 1    # if there's a name, the role is omitted
-                           # raise NotImplementedError(f"num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.")
+    tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
+    tokens_per_name = 1  # if there's a name, the role is omitted
+    # raise NotImplementedError(f"num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.")
     num_tokens = len(encoding.encode(text))
-    num_tokens += 3        # every reply is primed with <|start|>assistant<|message|>
+    num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
     num_tokens += tokens_per_message + tokens_per_name
     return num_tokens
 
 
 def split_into_chunks(text, model="gpt-4o"):
-    max_tokens = MODEL_TOKEN_LIMITS.get(model, 127514) - 64 # Default to 127514 if model not found
+    max_tokens = MODEL_TOKEN_LIMITS.get(model, 127514) - 64  # Default to 127514 if model not found
     """
     Split the text into chunks of the specified size.
     """
-    tokens = text.splitlines()
+    tokens = text.split('\n')
     chunks = []
     chunk = ''
     for token in tokens:
