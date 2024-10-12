@@ -11,16 +11,17 @@ MODEL_TOKEN_LIMITS = {
     "gemini-1.5-pro-exp-0801": 2097152,
 }
 
-PROMPT_CLASSIFICATOR_SYSTEM = """Your goal is to analyze a set of code changes and intelligently group related modifications into distinct commits, ensuring an even distribution of hunks across commits and avoiding commits with very few hunks. Given a JSON object containing the contents of modified files and a list of hunks (individual code modifications) with unique indices, your task is to cluster these hunks into logical commits. The order of the commits should reflect the chronological order in which they would have been created, from the oldest to the newest.
+PROMPT_CLASSIFICATOR_SYSTEM = """
+You are tasked with analyzing a set of code modifications (hunks) and grouping them into logical commits. Your goal is to create a structured representation of these commits that reflects how they would have been created in a real development process.
 
-Consider the following:
+To complete this task, follow these steps:
 
-- **Each hunk represents a specific code modification within a file.**
-- **You should strive to group hunks that address a common issue or feature into the same commit.**
-- **The order of commits should reflect a logical workflow, mimicking a developer's process, starting with the oldest commit and progressing to the newest.**
-- **Minor changes (e.g., adding imports, fixing typos) should be grouped with related features or placed in a dedicated commit at the end.**
-- **Aim for a balanced distribution of hunks across commits.**
-- **Every hunk index should be used once and only once.**
+1. Analyze each hunk in the context of *all* files contents.
+2. Group related hunks together based on the goal they contribute to.
+3. Create logical commits from these groups of hunks.
+4. Generate a descriptive commit message for each group.
+6. Ensure there are no duplicate hunk indices in any commit and that all indexes are used.
+7. Avoid small commits with small changes. If there are too many unrelated changes, group them into a single commit at the very end.
 
 Your output should be a JSON structure formatted as follows:
 
@@ -28,30 +29,24 @@ Your output should be a JSON structure formatted as follows:
 {
     "commits": [
         {
-            "message": "refactor: prepare things for new version",
-            "hunk_indices": [0, 1, 5, 11, 12, 13]
+            "message": "commit message here",
+            "hunk_indices": [list of hunk indices]
         },
-        {
-            "message": "refactor: cleanup code, improve readability and move things around",
-            "hunk_indices": [4, 9]
-        },
-        {
-            "message": "feat: implement support for X",
-            "hunk_indices": [3, 2, 6, 7, 8]
-        },
-        {
-            "message": "chore: random tweaks, bump version, etc.",
-            "hunk_indices": [10, 14]
         ...
     ]
 }
 ```
 
-Within this structure:
-   - `"commits"`: This is the top-level key containing an array of commit objects.
-   - Each object within `"commits"` represents a single commit and includes:
-      - `"message"`: A concise and descriptive commit message summarizing the changes within this commit.
-      - `"hunk_indices"`:  An array of indices, each pointing to a specific hunk belonging to this commit.
+When creating commit messages:
+- Use conventional commit format (e.g., "feat:", "fix:", "refactor:", "chore:", etc.)
+- Be concise but descriptive
+- Focus on the "what" and "why" of the changes, not the "how"
+
+Ensure that the order of commits in your output reflects the likely chronological order in which they would have been created. Earlier, more foundational changes should come before later, more specific changes.
+
+Remember, each commit should contain hunks that are logically related. Try to understand the reason behind each change and group them together if they address the same goal or feature. Make sure you consider the content of each change against other files as well. You can group changes that affect multiple files together.
+
+Provide your final answer ensuring it's a valid JSON structure.
 """
 
 PROMPT_CHANGELOG_GENERATOR = """You are tasked with generating a changelog for beta testers based on a list of commit messages and their corresponding diffs. Your goal is to create a concise, informative list of changes that is neither too technical nor too simplistic.
