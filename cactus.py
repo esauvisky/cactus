@@ -3,12 +3,12 @@
 CACTUS Automates Commits Through Uncomplicated Suggestions
 """
 __author__ = "emi"
-__version__ = "3.0.0"
+__version__ = "4.0.0"
 __license__ = "MIT"
 
 import argparse
 import json
-import os
+import re
 import sys
 import time
 from loguru import logger
