@@ -379,10 +379,10 @@ Remember to focus on changes that are most relevant and impactful for beta teste
                     {
                         "role": "user",
                         "content": f"\n\n# COMMIT MESSAGES:\n{commit_messages}\n\n# DIFF:\n" + chunk + "\n\n# CHANGELOG:\n"
-                                                                                                                                                                                                                                                                                                          # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
+                        # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
                     },
                 ])
-            changelog += response.choices[0].message.content                                                                                                                                                                                                                                              # type: ignore
+            changelog += response.choices[0].message.content  # type: ignore
 
     logger.info(f"{changelog}")
 
@@ -408,8 +408,9 @@ def generate_changes(args, model):
         logger.error("Aborted by user.")
         sys.exit(1)
 
-    # Apply patches using git am
-    logger.warning("Creating patches and resetting working directory...")
+    # unstage all staged changes
+    logger.warning("Unstaging all staged changes and applying individual diffs...")
+    run("git restore --staged .")
     time.sleep(1)
 
     generate_commits(patches, clusters, previous_sha, diff_to_apply)

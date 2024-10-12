@@ -1,8 +1,9 @@
 from typing import List
 import os
 import re
-import subprocess
 from collections import Counter
+import tempfile
+import subprocess
 
 import numpy as np
 from loguru import logger
@@ -198,23 +199,24 @@ def parse_diff(git_diff) -> List[PatchedFile]:
     return patch_set
 
 
-def create_patch_content(hunks, message):
-    from cactus import run  # Import run function from cactus
-    import time
-    name = run('git config user.name').stdout.strip()
-    email = run('git config user.email').stdout.strip()
-    date = time.strftime('%a, %d %b %Y %H:%M:%S %z', time.localtime())
-    hash = '0000000000000000000000000000000000000000'
+def stage_changes(hunks):
+    # Handle regular changes
+    with tempfile.NamedTemporaryFile(mode='wb', prefix='.tmp_patch_', delete=False) as fd:
+        filename = fd.name
 
-    headers = f"""From {hash} {date}
-From: {name} <{email}>
-Date: {date}
-Subject: [PATCH] {message}
+    for hunk in hunks:
+        with open(filename, 'ab') as fd:
+            fd.write(str(hunk).encode('utf-8'))
+            fd.write(b'\n')
 
-{message}
+    # Apply the patch file
+    result = subprocess.run(
+        f'git apply --cached --unidiff-zero --ignore-whitespace {filename}',
+        shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
+    
+    if result.returncode != 0:
+        logger.error(f"Failed to apply patch: {result.stderr}")
+        raise Exception("Failed to apply patch")
 
----
-"""
-    diff_content = ''.join(hunks)
-    patch_content = headers + '\n' + diff_content
-    return patch_content
+    # Clean up the temporary file
+    os.unlink(filename)
