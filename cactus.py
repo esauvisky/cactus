@@ -274,7 +274,7 @@ def split_into_chunks(text, model="gpt-4o"):
 
 def generate_changelog(args, model):
     # get list of commit messages from args.sha to HEAD
-    commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.splitlines()
+    commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.split("\n")
 
     # prepare exclude patterns for git diff
     pathspec = f"-- {args.pathspec}" if args.pathspec else ''
@@ -293,7 +293,8 @@ def generate_changelog(args, model):
     logger.debug(diff)
 
     if len(chunks) > 1:
-        logger.warning(f"Diff went over max token limit ({num_tokens_from_string(diff, model)} > {MODEL_TOKEN_LIMITS.get(model)}). Splitted into {len(chunks)} chunks.")
+        logger.warning(
+            f"Diff went over max token limit ({num_tokens_from_string(diff, model)} > {MODEL_TOKEN_LIMITS.get(model)}). Splitted into {len(chunks)} chunks.")
 
     changelog = ''
     for chunk in chunks:
@@ -310,12 +311,15 @@ def generate_changelog(args, model):
 
             gemini_model = genai.GenerativeModel(
                 model_name=model,
-                generation_config=generation_config,                                                                                                                                                                                                                                                      # type: ignore
+                generation_config=generation_config,  # type: ignore
+                # safety_settings=Adjust safety settings
+                # See https://ai.google.dev/gemini-api/docs/safety-settings
                 system_instruction="""
                 You are a highly skilled AI tasked with creating a user-friendly changelog based on git diffs. Your goal is to analyze the following git diffs and produce a clear, concise list of changes that are relevant and understandable to end-users.""",
             )
             chat_session = gemini_model.start_chat()
-            response = chat_session.send_message(f"""You are tasked with generating a changelog for beta testers based on a list of commit messages and their corresponding diffs. Your goal is to create a concise, informative list of changes that is neither too technical nor too simplistic.
+            response = chat_session.send_message(
+                f"""You are tasked with generating a changelog for beta testers based on a list of commit messages and their corresponding diffs. Your goal is to create a concise, informative list of changes that is neither too technical nor too simplistic.
 
 First, review the following commit messages:
 
