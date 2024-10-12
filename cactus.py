@@ -131,11 +131,56 @@ def generate_changes(args, model):
         message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
     logger.success(message)
 
-    logger.warning("Is this fine? [Y/n]")
-    response = input()
-    if response.lower() != "y" and response != "":
-        logger.error("Aborted by user.")
-        sys.exit(1)
+    while True:
+        logger.warning("Select an option:")
+        logger.info("1. Accept")
+        logger.info("2. Regenerate")
+        logger.info("3. Increase #")
+        logger.info("4. Decrease #")
+        logger.info("5. Quit")
+
+        response = input("Enter your choice (1-5): ")
+
+        if response == "1":  # Accept
+            break
+        elif response == "2":  # Regenerate
+            if "gemini" in model:
+                clusters = get_clusters_from_gemini(prompt_data, args.n, model)
+            else:
+                clusters = get_clusters_from_openai(prompt_data, args.n, model)
+            message = f"Regenerated {len(clusters)} groups of changes from {len(patches)} hunks:\n"
+            for ix, cluster in enumerate(clusters):
+                message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
+            logger.success(message)
+        elif response == "3":  # Increase #
+            args.n = len(clusters) + 1 if args.n is None else args.n + 1
+            if "gemini" in model:
+                clusters = get_clusters_from_gemini(prompt_data, args.n, model)
+            else:
+                clusters = get_clusters_from_openai(prompt_data, args.n, model)
+            message = f"Increased to {len(clusters)} groups of changes from {len(patches)} hunks:\n"
+            for ix, cluster in enumerate(clusters):
+                message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
+            logger.success(message)
+        elif response == "4":  # Decrease #
+            args.n = len(clusters) if args.n is None else args.n
+            if args.n <= 1:
+                logger.warning("Cannot decrease further. Minimum number of clusters is 1.")
+            else:
+                args.n -= 1
+                if "gemini" in model:
+                    clusters = get_clusters_from_gemini(prompt_data, args.n, model)
+                else:
+                    clusters = get_clusters_from_openai(prompt_data, args.n, model)
+                message = f"Decreased to {len(clusters)} groups of changes from {len(patches)} hunks:\n"
+                for ix, cluster in enumerate(clusters):
+                    message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
+                logger.success(message)
+        elif response == "5":  # Quit
+            logger.error("Aborted by user.")
+            sys.exit(1)
+        else:
+            logger.error("Invalid option. Please choose a number between 1 and 5.")
 
     # unstage all staged changes
     logger.warning("Unstaging all staged changes and applying individual diffs...")

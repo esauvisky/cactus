@@ -33,11 +33,9 @@ def run(cmd, capture_output=False):
         result = subprocess.run(
             cmd,
             shell=True,
-            stdout=subprocess.PIPE if capture_output else None,
-            stderr=subprocess.PIPE if capture_output else None)
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
         if capture_output:
-            result.stdout = result.stdout.strip()
-            result.stderr = result.stderr.strip()
             logger.debug(f"Command output: {result.stdout}")
             logger.debug(f"Command error: {result.stderr}")
     except Exception as e:
