@@ -7,137 +7,20 @@ __version__ = "3.0.0"
 __license__ = "MIT"
 
 import argparse
-import os
-import locale
-import time
 import json
-import subprocess
+import os
 import sys
-import tempfile    # Added for temporary directory handling
+import time
+from loguru import logger
 
 import openai
-from loguru import logger
-import tiktoken
-
-from constants import PROMPT_CHANGELOG_GENERATOR, PROMPT_CHANGELOG_SYSTEM, PROMPT_CLASSIFICATOR_SYSTEM
-
-client = None
-
 import google.generativeai as genai
-from google.generativeai import protos
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-# Create the model
-gemini_config = {
-    "temperature": 1,
-    "top_p": 0.8,
-    "top_k": 64,
-    "max_output_tokens": 1024,
-    "response_mime_type": "application/json",
-}
+from api import get_clusters_from_gemini, get_clusters_from_openai, load_api_key, setup_api_key
+from changelog import generate_changelog
+from utils import setup_logging
+from git_utils import run, get_git_diff, restore_changes, parse_diff, stage_changes
 from grouper import parse_diff, stage_changes
-
-# Models and their respective token limits
-MODEL_TOKEN_LIMITS = {
-    "gpt-3.5-turbo": 4192,
-    "gpt-3.5-turbo-16k": 16384,
-    "gpt-4-1106-preview": 127514,
-    "gpt-4o": 127514,
-    "gpt-4o-mini": 127514,
-    "gpt-4": 16384,
-    "gemini-1.5-pro": 1048576,
-    "gemini-1.5-flash": 1048576,
-    "gemini-1.5-pro-exp-0801": 2097152,
-}
-
-from loguru import logger
-
-
-def setup_logging(log_lvl="DEBUG", options={}):
-    file = options.get("file", False)
-    function = options.get("function", False)
-    process = options.get("process", False)
-    thread = options.get("thread", False)
-
-    log_fmt = (u"<n><d><level>{time:HH:mm:ss.SSS} | " + f"{'{file:>15.15}' if file else ''}" + f"{'{function:>15.15}' if function else ''}" + f"{':{line:<4} | ' if file or function else ''}"
-               + f"{'{process.name:>12.12} | ' if process else ''}" + f"{'{thread.name:<11.11} | ' if thread else ''}" + u"{level:1.1} | </level></d></n><level>{message}</level>")
-
-    logger.configure(
-        handlers=[{
-            "sink": lambda x: print(x, end=""),
-            "level": log_lvl,
-            "format": log_fmt,
-            "colorize": True,
-            "backtrace": True,
-            "diagnose": True
-        }],
-        levels=[
-            {"name": "TRACE", "color": "<white><dim>"},
-            {"name": "DEBUG", "color": "<cyan><dim>"},
-            {"name": "INFO", "color": "<white>"}
-        ]
-    )  # type: ignore # yapf: disable
-
-def setup_api_key(api_type):
-    api_key = input(f"Enter your {api_type} API key: ")
-    config_dir = os.path.expanduser("~/.config/cactus")
-    os.makedirs(config_dir, exist_ok=True)
-    with open(os.path.join(config_dir, f"{api_type.lower()}_api_key"), "w", encoding='utf-8', newline=os.linesep) as f:
-        f.write(api_key)
-    logger.success(f"{api_type} API key saved.")
-
-
-def load_api_key(api_type):
-    config_dir = os.path.expanduser("~/.config/cactus")
-    try:
-        with open(os.path.join(config_dir, f"{api_type.lower()}_api_key"), "r", encoding='utf-8') as f:
-            api_key = f.read().strip()
-        return api_key
-    except FileNotFoundError:
-        return None
-
-
-def run(cmd):
-    # # Get the correct encoding for the current platform
-    # encoding = (locale.getpreferredencoding(False) if sys.platform.startswith("win") else "utf-8")
-
-    logger.debug(f"Running command: {cmd}")
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
-
-    # Decode and clean up the output
-    result.stdout = result.stdout.strip()
-    result.stderr = result.stderr.strip()
-
-    return result
-
-
-def get_git_diff(context_size):
-    # Check if there are staged changes
-    result = run("git diff --cached --quiet --exit-code")
-    if result.returncode == 0:
-        # No staged changes
-        logger.error("No staged changes found, please stage the desired changes.")
-        sys.exit(1)
-
-    # Command to get the staged diff
-    cmd = f"git diff --inter-hunk-context={context_size} --unified={context_size} --minimal -p --staged --binary"
-    result = run(cmd)
-    if result.returncode != 0:
-        logger.error(f"Failed to get git diff: {result.stderr}")
-        sys.exit(1)
-
-    # Handle CRLF warnings
-    if "CRLF" in result.stderr:
-        logger.warning("Warning: Line endings (CRLF vs LF) may cause issues. Consider configuring Git properly.")
-
-    diff_to_apply = result.stdout
-    return diff_to_apply
-
-
-def restore_changes(full_diff):
-    with open("/tmp/cactus.diff", "wb") as f:
-        f.write(full_diff.encode('utf-8'))
-    run("git apply --cached --unidiff-zero --ignore-whitespace /tmp/cactus.diff")
 
 
 def get_patches_and_prompt(diff_to_apply):
@@ -169,68 +52,6 @@ def get_patches_and_prompt(diff_to_apply):
     return patches, json.dumps(prompt_data)
 
 
-def get_clusters_from_openai(prompt_data, clusters_n, model):
-    response = openai.chat.completions.create(
-        model=model,
-        top_p=1,
-        temperature=1,
-        max_tokens=1024,
-        response_format={"type": "json_object"},
-        messages=[
-            {
-                "role": "system", "content": PROMPT_CLASSIFICATOR_SYSTEM
-            },
-            {
-                "role": "user", "content": prompt_data
-            },
-            {
-                "role": "user",
-                "content": f"Return a JSON with {clusters_n} commits for the hunks above."
-                           if clusters_n else "Return the JSON for the hunks above."
-            },
-        ])
-    content = json.loads(response.choices[0].message.content) # type: ignore
-    clusters = content["commits"]
-
-    if clusters_n and len(clusters) != clusters_n:
-        logger.warning(f"Expected {clusters_n} clusters, but got {len(clusters)}. Trying again.")
-        return get_clusters_from_gemini(prompt_data, clusters_n, model)
-
-    return clusters
-
-
-def get_clusters_from_gemini(prompt_data, clusters_n, model):
-    model = genai.GenerativeModel(
-        model_name=model,
-        generation_config=gemini_config,                                                   # type: ignore
-        safety_settings={
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_UNSPECIFIED: HarmBlockThreshold.BLOCK_NONE,
-        },
-        system_instruction=PROMPT_CLASSIFICATOR_SYSTEM,
-    )
-
-    chat_session = model.start_chat(history=[
-        {
-            "role": "user",
-            "parts": prompt_data,
-        },
-    ])
-
-    response = chat_session.send_message(f"Return a JSON with {clusters_n} commits for the hunks above."
-                                         if clusters_n else "Return the JSON for the hunks above.")
-    content = json.loads(response.text)
-    clusters = content["commits"]
-
-    if clusters_n and len(clusters) != clusters_n:
-        logger.warning(f"Expected {clusters_n} clusters, but got {len(clusters)}. Trying again.")
-        return get_clusters_from_gemini(prompt_data, clusters_n, model)
-    return clusters
-
-
 def generate_commits(all_hunks, clusters, previous_sha, diff_to_apply):
     for idx, cluster in enumerate(clusters):
         hunks_in_cluster = [all_hunks[i] for i in cluster["hunk_indices"]]
@@ -245,113 +66,6 @@ def generate_commits(all_hunks, clusters, previous_sha, diff_to_apply):
             run(f"git reset {previous_sha}")
             restore_changes(diff_to_apply)
             sys.exit(1)
-
-
-def num_tokens_from_string(text, model):
-    """Return the number of tokens used by a list of messages."""
-    try:
-        encoding = tiktoken.encoding_for_model(model)
-    except KeyError:
-        # print("Warning: model not found. Using gpt-4-0613 encoding.")
-        model = "gpt-4-0613"
-        encoding = tiktoken.encoding_for_model(model)
-
-    tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
-    tokens_per_name = 1  # if there's a name, the role is omitted
-    # raise NotImplementedError(f"num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.")
-    num_tokens = len(encoding.encode(text))
-    num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
-    num_tokens += tokens_per_message + tokens_per_name
-    return num_tokens
-
-
-def split_into_chunks(text, model="gpt-4o"):
-    max_tokens = MODEL_TOKEN_LIMITS.get(model, 127514) - 64  # Default to 127514 if model not found
-    """
-    Split the text into chunks of the specified size.
-    """
-    tokens = text.split('\n')
-    chunks = []
-    chunk = ''
-    for token in tokens:
-        if num_tokens_from_string(chunk + '\n' + token, model) > max_tokens:
-            chunks.append(chunk)
-            chunk = ''
-        chunk += '\n' + token
-    chunks.append(chunk)
-    return chunks
-
-
-def generate_changelog(args, model):
-    # get list of commit messages from args.sha to HEAD
-    commit_messages = run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.split("\n")
-
-    # prepare exclude patterns for git diff
-    pathspec = f"-- {args.pathspec}" if args.pathspec else ''
-
-    # get git diff from args.sha to HEAD
-    diff = run(f"git diff --ignore-all-space --ignore-blank-lines -U{args.context_size} {args.sha} {pathspec}").stdout
-    err = run(f"git diff --ignore-all-space --ignore-blank-lines -U{args.context_size} {args.sha} {pathspec}").stderr
-
-    if err:
-        logger.error(f"An error occurred while getting git diff: {err}")
-        sys.exit(1)
-
-    # Split the diff into chunks if it exceeds the token limit
-    chunks = split_into_chunks(diff, model)
-
-    logger.debug(diff)
-
-    if len(chunks) > 1:
-        logger.warning(
-            f"Diff went over max token limit ({num_tokens_from_string(diff, model)} > {MODEL_TOKEN_LIMITS.get(model)}). Splitted into {len(chunks)} chunks.")
-
-    changelog = ''
-    for chunk in chunks:
-        # send request and append result to changelog
-        if "gemini" in model:
-            # Create the model
-            generation_config = {
-                "temperature": 1,
-                "top_p": 0.95,
-                "top_k": 64,
-                "max_output_tokens": 8192,
-                "response_mime_type": "text/plain",
-            }
-
-            gemini_model = genai.GenerativeModel(
-                model_name=model,
-                generation_config=generation_config,  # type: ignore
-                # safety_settings=Adjust safety settings
-                # See https://ai.google.dev/gemini-api/docs/safety-settings
-                system_instruction=PROMPT_CHANGELOG_SYSTEM,
-            )
-            chat_session = gemini_model.start_chat()
-            response = chat_session.send_message(PROMPT_CHANGELOG_GENERATOR.format(commit_messages=commit_messages, chunk=chunk))
-            changelog += response.text
-        else:
-            import openai
-            response = openai.chat.completions.create(
-                model=model,
-                n=1,
-                top_p=0.8,
-                temperature=0.8,
-                stop=None,
-                max_tokens=1000,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": PROMPT_CHANGELOG_SYSTEM
-                    },
-                    {
-                        "role": "user",
-                        "content": PROMPT_CHANGELOG_GENERATOR.format(commit_messages=commit_messages, chunk=chunk)
-                        # "content": PROMPT_CHANGELOG + "\n\nDIFF:\n" + chunk
-                    },
-                ])
-            changelog += response.choices[0].message.content  # type: ignore
-
-    logger.info(f"{changelog}")
 
 
 def generate_changes(args, model):

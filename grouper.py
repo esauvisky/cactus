@@ -1,13 +1,9 @@
 from typing import List
 import os
 import re
-from collections import Counter
-import tempfile
-import subprocess
-
 import numpy as np
-from loguru import logger
-from scipy.cluster import hierarchy
+from collections import Counter
+from git_utils import parse_diff, stage_changes
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -187,36 +183,3 @@ def extract_renames(git_diff):
     return renames, clean_diff
 
 
-def parse_diff(git_diff) -> List[PatchedFile]:
-    for _ in range(5):
-        try:
-            # Attempt to parse the diff
-            patch_set = PatchSet.from_string(git_diff)
-            break  # Parsing successful, break the loop
-        except UnidiffParseError:
-            # If parsing fails, add a newline and try again
-            git_diff += os.linesep
-    return patch_set
-
-
-def stage_changes(hunks):
-    # Handle regular changes
-    with tempfile.NamedTemporaryFile(mode='wb', prefix='.tmp_patch_', delete=False) as fd:
-        filename = fd.name
-
-    for hunk in hunks:
-        with open(filename, 'ab') as fd:
-            fd.write(str(hunk).encode('utf-8'))
-            fd.write(b'\n')
-
-    # Apply the patch file
-    result = subprocess.run(
-        f'git apply --cached --unidiff-zero --ignore-whitespace {filename}',
-        shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
-    
-    if result.returncode != 0:
-        logger.error(f"Failed to apply patch: {result.stderr}")
-        raise Exception("Failed to apply patch")
-
-    # Clean up the temporary file
-    os.unlink(filename)

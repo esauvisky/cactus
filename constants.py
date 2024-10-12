@@ -1,3 +1,16 @@
+# Models and their respective token limits
+MODEL_TOKEN_LIMITS = {
+    "gpt-3.5-turbo": 4192,
+    "gpt-3.5-turbo-16k": 16384,
+    "gpt-4-1106-preview": 127514,
+    "gpt-4o": 127514,
+    "gpt-4o-mini": 127514,
+    "gpt-4": 16384,
+    "gemini-1.5-pro": 1048576,
+    "gemini-1.5-flash": 1048576,
+    "gemini-1.5-pro-exp-0801": 2097152,
+}
+
 PROMPT_CLASSIFICATOR_SYSTEM = """Your goal is to analyze a set of code changes and intelligently group related modifications into distinct commits, ensuring an even distribution of hunks across commits and avoiding commits with very few hunks. Given a JSON object containing the contents of modified files and a list of hunks (individual code modifications) with unique indices, your task is to cluster these hunks into logical commits. The order of the commits should reflect the chronological order in which they would have been created, from the oldest to the newest.
 
 Consider the following:
