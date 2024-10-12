@@ -120,7 +120,6 @@ def generate_commits(all_hunks, clusters, previous_sha, full_diff):
             restore_changes(full_diff)
             sys.exit(1)
 
-
 def generate_changes(args, model):
     previous_sha = run("git rev-parse --short HEAD").stdout
     full_diff = get_git_diff(args.context_size)
@@ -226,6 +225,7 @@ def generate_changes(args, model):
     time.sleep(1)
 
     generate_commits(patches, clusters, previous_sha, full_diff)
+
 
 
 if __name__ == "__main__":
