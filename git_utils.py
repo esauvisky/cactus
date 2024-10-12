@@ -56,5 +56,5 @@ def stage_changes(hunks):
         stderr=subprocess.PIPE)
 
     if result.returncode != 0:
-        logger.error(f"Failed to apply patch: {result.stderr.decode('utf-8', errors='ignore')}")
+        logger.error(f"Failed to apply patch: {result.stdout.decode('utf-8', errors='ignore')}\n{result.stderr.decode('utf-8', errors='ignore')}")
         raise Exception("Failed to apply patch")
