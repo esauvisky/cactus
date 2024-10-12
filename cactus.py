@@ -191,6 +191,11 @@ def get_clusters_from_openai(prompt_data, clusters_n, model):
         ])
     content = json.loads(response.choices[0].message.content) # type: ignore
     clusters = content["commits"]
+
+    if clusters_n and len(clusters) != clusters_n:
+        logger.warning(f"Expected {clusters_n} clusters, but got {len(clusters)}. Trying again.")
+        return get_clusters_from_gemini(prompt_data, clusters_n, model)
+
     return clusters
 
 
@@ -218,6 +223,10 @@ def get_clusters_from_gemini(prompt_data, clusters_n, model):
                                          if clusters_n else "Return the JSON for the hunks above.")
     content = json.loads(response.text)
     clusters = content["commits"]
+
+    if clusters_n and len(clusters) != clusters_n:
+        logger.warning(f"Expected {clusters_n} clusters, but got {len(clusters)}. Trying again.")
+        return get_clusters_from_gemini(prompt_data, clusters_n, model)
     return clusters
 
 
