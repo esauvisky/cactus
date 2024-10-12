@@ -43,6 +43,7 @@ MODEL_TOKEN_LIMITS = {
     "gpt-3.5-turbo-16k": 16384,
     "gpt-4-1106-preview": 127514,
     "gpt-4o": 127514,
+    "gpt-4o-mini": 127514,
     "gpt-4": 16384,
     "gemini-1.5-pro": 1048576,
     "gemini-1.5-flash": 1048576,
@@ -455,7 +456,7 @@ if __name__ == "__main__":
         "-m",
         "--model",
         action="store",
-        default="gemini-1.5-pro",
+        default="gpt-4o-mini",
         help="Model used for the generations",
     )
     PARSERS = PARSER.add_subparsers(title="subcommands", dest="action")
