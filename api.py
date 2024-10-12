@@ -49,19 +49,24 @@ def num_tokens_from_string(text, model):
 
 
 def split_into_chunks(text, model="gpt-4o"):
-    max_tokens = MODEL_TOKEN_LIMITS.get(model, 127514) - 64 # Default to 127514 if model not found
+    max_tokens = MODEL_TOKEN_LIMITS.get(model, 127514) - 64  # Default to 127514 if model not found
     """
     Split the text into chunks of the specified size.
     """
     tokens = text.split('\n')
-    chunks = []
-    chunk = ''
+    chunks, current_chunk, current_length = [], [], 0
+
     for token in tokens:
-        if num_tokens_from_string(chunk + '\n' + token, model) > max_tokens:
-            chunks.append(chunk)
-            chunk = ''
-        chunk += '\n' + token
-    chunks.append(chunk)
+        token_length = num_tokens_from_string(token, model)
+        if current_length + token_length > max_tokens:
+            chunks.append('\n'.join(current_chunk))
+            current_chunk, current_length = [], 0
+        current_chunk.append(token)
+        current_length += token_length
+
+    if current_chunk:
+        chunks.append('\n'.join(current_chunk))
+
     return chunks
 
 
@@ -85,14 +90,8 @@ def get_clusters_from_openai(prompt_data, clusters_n, model):
                            if clusters_n else "Return the JSON for the hunks above."
             },
         ])
-    content = json.loads(response.choices[0].message.content) # type: ignore
-    clusters = content["commits"]
-
-    if clusters_n and len(clusters) != clusters_n:
-        logger.warning(f"Expected {clusters_n} clusters, but got {len(clusters)}. Trying again.")
-        return get_clusters_from_gemini(prompt_data, clusters_n, model)
-
-    return clusters
+    clusters = json.loads(response.choices[0].message.content)["commits"] # type: ignore
+    return clusters if not clusters_n or len(clusters) == clusters_n else get_clusters_from_gemini(prompt_data, clusters_n, model)
 
 
 def get_clusters_from_gemini(prompt_data, clusters_n, model):
