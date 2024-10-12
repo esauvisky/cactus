@@ -84,7 +84,8 @@ def get_most_common_words(hunks, n=10):
 
     for hunk in hunks:
         words = re.findall(r'\w+', get_modified_lines(hunk))
-        word_counts.update(words)
+        filtered_words = filter(lambda word: word.lower() not in RESERVED_WORDS | COMMON_ENGLISH_WORDS, map(str.lower, words))
+        word_counts.update(filtered_words)
 
     return [word for word, _ in word_counts.most_common(n)]
 
@@ -124,48 +125,18 @@ def get_optimal_n_common_words(hunks, min_n=1, max_n=50):
 
 
 def similarity_matrix(hunks, type='count', stop_words=None):
-    if type == 'tfidf':
-        # Compute the TF-IDF matrix for the hunks
-        vectorizer = TfidfVectorizer(stop_words=stop_words, lowercase=False)
-        tfidf_matrix = vectorizer.fit_transform(hunks)
-
-        # Calculate the pairwise cosine similarity
-        matrix = cosine_similarity(tfidf_matrix, tfidf_matrix)
-    elif type == 'count':
-        # Compute the Bag of Words matrix for the hunks
-        vectorizer = CountVectorizer(stop_words=stop_words, lowercase=False)
-        bow_matrix = vectorizer.fit_transform(hunks)
-
-        # Calculate the pairwise cosine similarity between the matrix rows
-        matrix = cosine_similarity(bow_matrix)
-    elif type == 'jaccard' or type == 'fuzzy':
-        n = len(hunks)
-        matrix = np.zeros((n, n))
-
-        for i in range(n):
-            for j in range(i, n):
-                if i == j:
-                    matrix[i][j] = 1
-                else:
-                    if type == 'jaccard':
-                        sim_score = jaccard_similarity(hunks[i], hunks[j])
-                    elif type == 'fuzzy':
-                        sim_score = fuzz.token_set_ratio(hunks[i], hunks[j]) / 100
-                    matrix[i][j] = sim_score
-                    matrix[j][i] = sim_score
+    vectorizer = TfidfVectorizer if type == 'tfidf' else CountVectorizer
+    matrix = cosine_similarity(vectorizer(stop_words=stop_words, lowercase=False).fit_transform(hunks)) if type in ['tfidf', 'count'] else np.array([
+        [1 if i == j else (jaccard_similarity(hunks[i], hunks[j]) if type == 'jaccard' else fuzz.token_set_ratio(hunks[i], hunks[j]) / 100) for j in range(len(hunks))] for i in range(len(hunks))
+    ])
     return matrix
 
 
 def get_modified_lines(hunk):
-    filtered_lines = []
-    for line in hunk.splitlines():
-        if line.startswith('+') or line.startswith('-'):
-            line = re.sub(r" +", " ", line)
-            line = re.sub(r"([+-]) ?", "", line)
-            # replaces all special characters with space
-            line = re.sub(r"[^a-zA-Z0-9\s]", " ", line)
-            filtered_lines.append(line)
-    return os.linesep.join(filtered_lines)
+    return os.linesep.join(
+        re.sub(r"[^a-zA-Z0-9\s]", " ", re.sub(r"([+-]) ?", "", re.sub(r" +", " ", line)))
+        for line in hunk.splitlines() if line.startswith(('+', '-'))
+    )
 
 
 def extract_renames(git_diff):
