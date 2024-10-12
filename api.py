@@ -49,10 +49,10 @@ def num_tokens_from_string(text, model):
 
 
 def split_into_chunks(text, model="gpt-4o"):
-    max_tokens = MODEL_TOKEN_LIMITS.get(model, 127514) - 64  # Default to 127514 if model not found
     """
     Split the text into chunks of the specified size.
     """
+    max_tokens = MODEL_TOKEN_LIMITS.get(model, 127514) - 64 # Default to 127514 if model not found
     tokens = text.split('\n')
     chunks, current_chunk, current_length = [], [], 0
 
@@ -90,8 +90,9 @@ def get_clusters_from_openai(prompt_data, clusters_n, model):
                            if clusters_n else "Return the JSON for the hunks above."
             },
         ])
-    clusters = json.loads(response.choices[0].message.content)["commits"] # type: ignore
-    return clusters if not clusters_n or len(clusters) == clusters_n else get_clusters_from_gemini(prompt_data, clusters_n, model)
+    clusters = json.loads(response.choices[0].message.content)["commits"]                           # type: ignore
+    return clusters if not clusters_n or len(clusters) == clusters_n else get_clusters_from_gemini(
+        prompt_data, clusters_n, model)
 
 
 def get_clusters_from_gemini(prompt_data, clusters_n, model):
