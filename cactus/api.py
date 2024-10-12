@@ -4,7 +4,7 @@ from loguru import logger
 import openai
 import tiktoken
 
-from constants import MODEL_TOKEN_LIMITS, PROMPT_CLASSIFICATOR_SYSTEM
+from .constants import MODEL_TOKEN_LIMITS, PROMPT_CLASSIFICATOR_SYSTEM
 
 import google.generativeai as genai
 from google.generativeai import protos

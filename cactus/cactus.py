@@ -2,9 +2,6 @@
 """
 CACTUS Automates Commits Through Uncomplicated Suggestions
 """
-__author__ = "emi"
-__version__ = "4.0.0"
-__license__ = "MIT"
 
 import argparse
 import json
@@ -16,23 +13,22 @@ from loguru import logger
 import openai
 import google.generativeai as genai
 
-from api import get_clusters_from_gemini, get_clusters_from_openai, load_api_key, setup_api_key
-from changelog import generate_changelog
-from utils import setup_logging
-from git_utils import run, get_git_diff, restore_changes, parse_diff, stage_changes
-from grouper import parse_diff, stage_changes
+from .api import get_clusters_from_gemini, get_clusters_from_openai, load_api_key, setup_api_key
+from .changelog import generate_changelog
+from .utils import setup_logging
+from .git_utils import run, get_git_diff, restore_changes, parse_diff, stage_changes
+from .grouper import parse_diff, stage_changes
 import os
 import re
 import json
 from unidiff import PatchSet
 from loguru import logger
 
-
-
 from inquirer import prompt
 from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
+
 
 def extract_patches(diff_data):
     """
@@ -120,6 +116,7 @@ def generate_commits(all_hunks, clusters, previous_sha, full_diff):
             restore_changes(full_diff)
             sys.exit(1)
 
+
 def generate_changes(args, model):
     previous_sha = run("git rev-parse --short HEAD").stdout
     full_diff = get_git_diff(args.context_size)
@@ -141,11 +138,21 @@ def generate_changes(args, model):
 
     # Define choices and their corresponding shortcut keys
     choices = [
-        {'name': 'Accept', 'value': 'accept', 'key': 'c'},
-        {'name': 'Regenerate', 'value': 'regenerate', 'key': 'r'},
-        {'name': 'Increase #', 'value': 'increase', 'key': 'i'},
-        {'name': 'Decrease #', 'value': 'decrease', 'key': 'd'},
-        {'name': 'Quit', 'value': 'quit', 'key': 'q'},
+        {
+            'name': 'Accept', 'value': 'accept', 'key': 'c'
+        },
+        {
+            'name': 'Regenerate', 'value': 'regenerate', 'key': 'r'
+        },
+        {
+            'name': 'Increase #', 'value': 'increase', 'key': 'i'
+        },
+        {
+            'name': 'Decrease #', 'value': 'decrease', 'key': 'd'
+        },
+        {
+            'name': 'Quit', 'value': 'quit', 'key': 'q'
+        },
     ]
 
     # Create a key bindings object
@@ -156,6 +163,7 @@ def generate_changes(args, model):
 
     # Define key bindings for each choice
     for choice in choices:
+
         @kb.add(choice['key'])
         def _(event, choice=choice):
             user_choice['value'] = choice['value']
@@ -177,7 +185,7 @@ def generate_changes(args, model):
             # Wait for user input (key press)
             from prompt_toolkit.shortcuts import PromptSession
             session = PromptSession(key_bindings=kb)
-            session.prompt('')  # Empty prompt to capture key press
+            session.prompt('') # Empty prompt to capture key press
         except KeyboardInterrupt:
             logger.error("Aborted by user via Ctrl+C.")
             sys.exit(1)
@@ -227,9 +235,7 @@ def generate_changes(args, model):
     generate_commits(patches, clusters, previous_sha, full_diff)
 
 
-
-if __name__ == "__main__":
-
+def main():
     class Formatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
         pass
 
@@ -322,3 +328,7 @@ if __name__ == "__main__":
         generate_changes(args, args.model)
     elif args.action == "changelog":
         generate_changelog(args, args.model)
+
+
+if __name__ == "__main__":
+    main()
