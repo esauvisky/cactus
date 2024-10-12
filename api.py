@@ -105,7 +105,7 @@ Now, examine the JSON object containing the list of hunks:
             },
         ])
     clusters = json.loads(response.choices[0].message.content)["commits"]                           # type: ignore
-    return clusters if not clusters_n or len(clusters) == clusters_n else get_clusters_from_gemini(
+    return clusters if not clusters_n or len(clusters) == clusters_n else get_clusters_from_openai(
         prompt_data, clusters_n, model)
 
 
@@ -123,8 +123,7 @@ def get_clusters_from_gemini(prompt_data, clusters_n, model):
             HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
             HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_UNSPECIFIED: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE
         },
         system_instruction=PROMPT_CLASSIFICATOR_SYSTEM,
     )
