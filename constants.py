@@ -11,20 +11,32 @@ MODEL_TOKEN_LIMITS = {
     "gemini-1.5-pro-exp-0801": 2097152,
 }
 
-PROMPT_CLASSIFICATOR_SYSTEM = """
-You are tasked with analyzing a set of code modifications (hunks) and grouping them into logical commits. Your goal is to create a structured representation of these commits that reflects how they would have been created in a real development process.
+PROMPT_CLASSIFICATOR_SYSTEM = """As a Git commit analyzer, your task is to group code changes into meaningful, substantial commits. Prioritize significant functional changes and avoid creating commits for minor modifications.
 
-To complete this task, follow these steps:
+Key principles:
+1. Focus on impactful code changes that alter functionality or structure.
+2. Group related changes across multiple files when appropriate.
+3. Avoid creating commits for small, isolated changes.
 
-1. Analyze each hunk in the context of *all* files contents.
-2. Group related hunks together based on the goal they contribute to.
-3. Create logical commits from these groups of hunks.
-4. Generate a descriptive commit message for each group.
-6. Ensure there are no duplicate hunk indices in any commit and that all indexes are used.
-7. Avoid small commits with small changes. If there are too many unrelated changes, group them into a single commit at the very end.
+Analysis process:
+1. Examine each hunk, identifying substantial code modifications.
+2. Group related changes into logical, sizeable commits.
+3. Ignore or combine minor changes (formatting, whitespace, comments) with related substantial changes.
+4. If minor changes accumulate without nearby substantial changes, group them together.
 
-Your output should be a JSON structure formatted as follows:
+Commit creation guidelines:
+- Ensure each commit represents a meaningful unit of work.
+- Combine small, related changes to form more substantial commits.
+- Use conventional prefixes (feat, fix, refactor, docs, chore) appropriately.
+- Write clear, concise messages describing what changed and why.
+- Never infer intentions beyond what's explicitly changed in the code.
 
+Strict rules:
+- Do not create commits for single-line changes unless critically important.
+- Avoid commits that only change formatting or whitespace.
+- Don't separate minor changes if they can be reasonably included with functional changes.
+
+Output format:
 ```json
 {
     "commits": [
@@ -37,17 +49,12 @@ Your output should be a JSON structure formatted as follows:
 }
 ```
 
-When creating commit messages:
-- Use conventional commit format (e.g., "feat:", "fix:", "refactor:", "chore:", etc.)
-- Be concise but descriptive
-- Focus on the "what" and "why" of the changes, not the "how"
+Final verification:
+1. Confirm each commit contains substantial changes.
+2. Ensure no commit is created for trivial modifications alone.
+3. Verify commit messages accurately reflect the actual code changes.
 
-Ensure that the order of commits in your output reflects the likely chronological order in which they would have been created. Earlier, more foundational changes should come before later, more specific changes.
-
-Remember, each commit should contain hunks that are logically related. Try to understand the reason behind each change and group them together if they address the same goal or feature. Make sure you consider the content of each change against other files as well. You can group changes that affect multiple files together.
-
-Provide your final answer ensuring it's a valid JSON structure.
-"""
+Provide your analysis as a valid JSON structure only."""
 
 PROMPT_CHANGELOG_GENERATOR = """You are tasked with generating a changelog for beta testers based on a list of commit messages and their corresponding diffs. Your goal is to create a concise, informative list of changes that is neither too technical nor too simplistic.
 
