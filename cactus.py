@@ -101,7 +101,7 @@ def prepare_prompt_data(diff_data):
             prompt_data["hunks"].append({"hunk_index": hunk_index, "content": hunk_content_decoded})
             hunk_index += 1
 
-    return json.dumps(prompt_data)
+    return prompt_data
 
 
 def generate_commits(all_hunks, clusters, previous_sha, full_diff):

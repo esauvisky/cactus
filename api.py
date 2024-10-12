@@ -71,23 +71,37 @@ def split_into_chunks(text, model="gpt-4o"):
 
 
 def get_clusters_from_openai(prompt_data, clusters_n, model):
+    file_contents = "\n".join([
+        f"# {file_path}\n{file_content["content"]}\n" for file_path, file_content in prompt_data["files"].items()
+    ])
+    hunks_json = "\n".join([
+    "# Index: " + str(hunk["hunk_index"]) + "\n" + str(hunk["content"]) for hunk in prompt_data["hunks"]])
+    content = """First, review the contents of the modified files:
+
+<file_contents>
+{FILE_CONTENTS}
+</file_contents>
+
+Now, examine the JSON object containing the list of hunks:
+
+<hunks_json>
+{HUNKS_JSON}
+</hunks_json>""".format(
+        FILE_CONTENTS=file_contents, HUNKS_JSON=hunks_json) + (f"\n\nReturn a JSON with {clusters_n} commits for the hunks above."
+                                                               if clusters_n else "\n\nReturn the JSON for the hunks above.")
+
     response = openai.chat.completions.create(
         model=model,
         top_p=1,
         temperature=1,
-        max_tokens=1024,
+        max_tokens=16384,
         response_format={"type": "json_object"},
         messages=[
             {
                 "role": "system", "content": PROMPT_CLASSIFICATOR_SYSTEM
             },
             {
-                "role": "user", "content": prompt_data
-            },
-            {
-                "role": "user",
-                "content": f"Return a JSON with {clusters_n} commits for the hunks above."
-                           if clusters_n else "Return the JSON for the hunks above."
+                "role": "user", "content": content
             },
         ])
     clusters = json.loads(response.choices[0].message.content)["commits"]                           # type: ignore
