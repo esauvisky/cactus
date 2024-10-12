@@ -35,7 +35,7 @@ gemini_config = {
     "max_output_tokens": 1024,
     "response_mime_type": "application/json",
 }
-from grouper import parse_diff, create_patch_content # Updated import
+from grouper import parse_diff, stage_changes
 
 # Models and their respective token limits
 MODEL_TOKEN_LIMITS = {
@@ -120,7 +120,7 @@ def get_git_diff(context_size):
         sys.exit(1)
 
     # Command to get the staged diff
-    cmd = f"git diff --inter-hunk-context={context_size} --unified={context_size} --minimal -p --staged"
+    cmd = f"git diff --inter-hunk-context={context_size} --unified={context_size} --minimal -p --staged --binary"
     result = run(cmd)
     if result.returncode != 0:
         logger.error(f"Failed to get git diff: {result.stderr}")
@@ -135,10 +135,9 @@ def get_git_diff(context_size):
 
 
 def restore_changes(full_diff):
-    with open("/tmp/cactus.diff", "w", encoding="utf-8", newline=os.linesep) as f:
-        f.write(full_diff)
-        f.write(os.linesep)
-    run("git apply --cached --unidiff-zero /tmp/cactus.diff")
+    with open("/tmp/cactus.diff", "wb") as f:
+        f.write(full_diff.encode('utf-8'))
+    run("git apply --cached --unidiff-zero --ignore-whitespace /tmp/cactus.diff")
 
 
 def get_patches_and_prompt(diff_to_apply):
