@@ -28,6 +28,12 @@ from unidiff import PatchSet
 from loguru import logger
 
 
+
+from inquirer import prompt
+from prompt_toolkit.shortcuts import print_formatted_text
+from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.key_binding import KeyBindings
+
 def extract_patches(diff_data):
     """
     Extracts individual hunks from the diff data and returns a list of binary patches.
@@ -126,43 +132,75 @@ def generate_changes(args, model):
     else:
         clusters = get_clusters_from_openai(prompt_data, args.n, model)
 
-    message = f"Separated into {len(clusters)} groups of changes from {len(patches)} hunks:\n"
-    for ix, cluster in enumerate(clusters):
-        message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
-    logger.success(message)
+    def display_clusters():
+        message = f"Separated into {len(clusters)} groups of changes from {len(patches)} hunks:\n"
+        for ix, cluster in enumerate(clusters):
+            message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
+        logger.success(message)
 
+    display_clusters()
+
+    # Define choices and their corresponding shortcut keys
+    choices = [
+        {'name': 'Accept', 'value': 'accept', 'key': 'c'},
+        {'name': 'Regenerate', 'value': 'regenerate', 'key': 'r'},
+        {'name': 'Increase #', 'value': 'increase', 'key': 'i'},
+        {'name': 'Decrease #', 'value': 'decrease', 'key': 'd'},
+        {'name': 'Quit', 'value': 'quit', 'key': 'q'},
+    ]
+
+    # Create a key bindings object
+    kb = KeyBindings()
+
+    # Variable to store the user's choice
+    user_choice = {'value': None}
+
+    # Define key bindings for each choice
+    for choice in choices:
+        @kb.add(choice['key'])
+        def _(event, choice=choice):
+            user_choice['value'] = choice['value']
+            event.app.exit()
+
+    # Handle Ctrl+C as Quit
+    @kb.add('c-c')
+    def _(event):
+        user_choice['value'] = 'quit'
+        event.app.exit()
+
+    # Start a loop to keep prompting the user
     while True:
-        logger.warning("Select an option:")
-        logger.info("1. Accept")
-        logger.info("2. Regenerate")
-        logger.info("3. Increase #")
-        logger.info("4. Decrease #")
-        logger.info("5. Quit")
+        print_formatted_text(HTML('<b>Select an option (press c/r/i/d/q):</b>'))
+        for choice in choices:
+            print_formatted_text(f"{choice['key']}: {choice['name']}")
 
-        response = input("Enter your choice (1-5): ")
+        try:
+            # Wait for user input (key press)
+            from prompt_toolkit.shortcuts import PromptSession
+            session = PromptSession(key_bindings=kb)
+            session.prompt('')  # Empty prompt to capture key press
+        except KeyboardInterrupt:
+            logger.error("Aborted by user via Ctrl+C.")
+            sys.exit(1)
 
-        if response == "1":  # Accept
+        response = user_choice['value']
+
+        if response == 'accept':
             break
-        elif response == "2":  # Regenerate
+        elif response == 'regenerate':
             if "gemini" in model:
                 clusters = get_clusters_from_gemini(prompt_data, args.n, model)
             else:
                 clusters = get_clusters_from_openai(prompt_data, args.n, model)
-            message = f"Regenerated {len(clusters)} groups of changes from {len(patches)} hunks:\n"
-            for ix, cluster in enumerate(clusters):
-                message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
-            logger.success(message)
-        elif response == "3":  # Increase #
+            display_clusters()
+        elif response == 'increase':
             args.n = len(clusters) + 1 if args.n is None else args.n + 1
             if "gemini" in model:
                 clusters = get_clusters_from_gemini(prompt_data, args.n, model)
             else:
                 clusters = get_clusters_from_openai(prompt_data, args.n, model)
-            message = f"Increased to {len(clusters)} groups of changes from {len(patches)} hunks:\n"
-            for ix, cluster in enumerate(clusters):
-                message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
-            logger.success(message)
-        elif response == "4":  # Decrease #
+            display_clusters()
+        elif response == 'decrease':
             args.n = len(clusters) if args.n is None else args.n
             if args.n <= 1:
                 logger.warning("Cannot decrease further. Minimum number of clusters is 1.")
@@ -172,17 +210,17 @@ def generate_changes(args, model):
                     clusters = get_clusters_from_gemini(prompt_data, args.n, model)
                 else:
                     clusters = get_clusters_from_openai(prompt_data, args.n, model)
-                message = f"Decreased to {len(clusters)} groups of changes from {len(patches)} hunks:\n"
-                for ix, cluster in enumerate(clusters):
-                    message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
-                logger.success(message)
-        elif response == "5":  # Quit
+                display_clusters()
+        elif response == 'quit':
             logger.error("Aborted by user.")
             sys.exit(1)
         else:
-            logger.error("Invalid option. Please choose a number between 1 and 5.")
+            logger.error("Invalid option.")
 
-    # unstage all staged changes
+        # Reset user_choice for the next iteration
+        user_choice['value'] = None
+
+    # Unstage all staged changes
     logger.warning("Unstaging all staged changes and applying individual diffs...")
     run("git restore --staged .")
     time.sleep(1)
