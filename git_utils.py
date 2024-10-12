@@ -7,13 +7,11 @@ from unidiff import PatchSet, UnidiffParseError
 from utils import run
 
 def get_git_diff(context_size):
-    result = run("git diff --cached --quiet --exit-code")
-    if result.returncode == 0:
+    if run("git diff --cached --quiet --exit-code").returncode == 0:
         logger.error("No staged changes found, please stage the desired changes.")
         sys.exit(1)
 
-    cmd = f"git diff --inter-hunk-context={context_size} --unified={context_size} --minimal -p --staged --binary"
-    result = run(cmd)
+    result = run(f"git diff --inter-hunk-context={context_size} --unified={context_size} --minimal -p --staged --binary")
     if result.returncode != 0:
         logger.error(f"Failed to get git diff: {result.stderr}")
         sys.exit(1)
@@ -24,9 +22,7 @@ def get_git_diff(context_size):
     return result.stdout
 
 def restore_changes(full_diff):
-    with open("/tmp/cactus.diff", "wb") as f:
-        f.write(full_diff.encode('utf-8'))
-    run("git apply --cached --unidiff-zero --ignore-whitespace /tmp/cactus.diff")
+    run("git apply --cached --unidiff-zero --ignore-whitespace", input=full_diff.encode('utf-8'))
 
 def parse_diff(git_diff):
     for _ in range(5):
