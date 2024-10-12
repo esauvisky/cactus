@@ -142,7 +142,7 @@ def generate_changes(args, model):
     run("git restore --staged .")
     time.sleep(1)
 
-    generate_commits(patches, clusters, previous_sha, diff_to_apply)
+    generate_commits(patches, clusters, previous_sha, full_diff)
 
 
 if __name__ == "__main__":

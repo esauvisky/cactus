@@ -6,6 +6,7 @@ from loguru import logger
 from unidiff import PatchSet, UnidiffParseError
 from utils import run
 
+
 def get_git_diff(context_size):
     if run("git diff --cached --quiet --exit-code").returncode == 0:
         logger.error("No staged changes found, please stage the desired changes.")
