@@ -1,6 +1,7 @@
 import subprocess
 from loguru import logger
 
+
 def setup_logging(log_lvl="DEBUG", options={}):
     file = options.get("file", False)
     function = options.get("function", False)
@@ -26,13 +27,20 @@ def setup_logging(log_lvl="DEBUG", options={}):
         ]
     )  # type: ignore # yapf: disable
 
-def run(cmd):
-    logger.debug(f"Running command: {cmd}")
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
-    result.stdout = result.stdout.strip()
-    result.stderr = result.stderr.strip()
-
-    logger.debug(f"Command output: {result.stdout}")
-    logger.debug(f"Command error: {result.stderr}")
-
+def run(cmd, capture_output=False):
+    try:
+        logger.debug(f"Running command: {cmd}")
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            stdout=subprocess.PIPE if capture_output else None,
+            stderr=subprocess.PIPE if capture_output else None)
+        if capture_output:
+            result.stdout = result.stdout.strip()
+            result.stderr = result.stderr.strip()
+            logger.debug(f"Command output: {result.stdout}")
+            logger.debug(f"Command error: {result.stderr}")
+    except Exception as e:
+        logger.error(f"Failed to run command: {cmd}")
+        return subprocess.CompletedProcess(args=cmd, returncode=1, stdout=b'', stderr=str(e).encode())
     return result
