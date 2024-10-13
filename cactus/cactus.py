@@ -34,6 +34,7 @@ from prompt_toolkit.key_binding import KeyBindings
 def extract_patches(diff_data):
     """
     Extracts individual hunks from the diff data and returns a list of binary patches.
+    Correctly formats the diff headers, handling scenarios like added or deleted files.
     """
     diff_text = diff_data.decode('latin-1')
     patches = []
@@ -47,20 +48,43 @@ def extract_patches(diff_data):
     for patched_file in patch_set:
         if patched_file.is_binary_file:
             logger.warning(f"Skipping binary file {patched_file.path}")
-            continue    # Skip binary files
+            continue  # Skip binary files
 
         file_headers = []
-        # Build file headers
-        file_headers.append(f'diff --git a/{patched_file.source_file} b/{patched_file.target_file}')
+
+        # Determine the actual file path for the diff --git header
+        # Git expects 'diff --git a/path/to/file b/path/to/file' even for added/deleted files
+        file_path = patched_file.path
+
+        # Build the 'diff --git' header
+        file_headers.append(f'diff --git a/{file_path} b/{file_path}')
+
         if patched_file.is_rename:
+            # Handle file renames
             file_headers.append(f'rename from {patched_file.source_file}')
             file_headers.append(f'rename to {patched_file.target_file}')
         else:
-            # if patched_file.source_revision and patched_file.target_revision:
-            #     file_headers.append(f'index 000000..000000 {patched_file.source_mode}')
-            if patched_file.source_file and patched_file.target_file:
-                file_headers.append(f'--- {patched_file.source_file}')
-                file_headers.append(f'+++ {patched_file.target_file}')
+            # Determine if the file is added, deleted, or modified
+            is_added = patched_file.source_file == '/dev/null'
+            is_deleted = patched_file.target_file == '/dev/null'
+
+            if is_added:
+                # For added files, '---' is /dev/null and '+++' is the new file
+                file_headers.append('new file mode 100644')  # Optional: include file mode
+                file_headers.append(f'--- /dev/null')
+                file_headers.append(f'+++ b/{file_path}')
+            elif is_deleted:
+                # For deleted files, '---' is the old file and '+++' is /dev/null
+                file_headers.append('deleted file mode 100644')  # Optional: include file mode
+                file_headers.append(f'--- a/{file_path}')
+                file_headers.append(f'+++ /dev/null')
+            else:
+                # For modified files, both '---' and '+++' reference the file
+                # # Optionally, include the index line with file modes
+                # if patched_file.source_revision and patched_file.target_revision:
+                #     file_headers.append(f'index {patched_file.source_revision}..{patched_file.target_revision} {patched_file.source_mode}')
+                file_headers.append(f'--- a/{file_path}')
+                file_headers.append(f'+++ b/{file_path}')
 
         file_header_text = '\n'.join(file_headers) + '\n'
 
@@ -71,6 +95,7 @@ def extract_patches(diff_data):
             patches.append(patch_bytes)
 
     return patches
+
 
 
 def prepare_prompt_data(diff_data):
