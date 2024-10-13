@@ -4,6 +4,7 @@ CACTUS Automates Commits Through Uncomplicated Suggestions
 """
 
 import argparse
+from functools import partial
 import json
 import re
 import sys
