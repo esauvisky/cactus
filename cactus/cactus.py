@@ -134,7 +134,17 @@ def prepare_prompt_data(diff_data):
 
 def generate_commits(all_hunks, clusters, previous_sha, full_diff):
     for cluster in clusters:
-        stage_changes([all_hunks[i] for i in cluster["hunk_indices"]])
+        try:
+            stage_changes([all_hunks[i] for i in cluster["hunk_indices"]])
+        except Exception as e:
+            logger.error(f"Failed to stage changes: {e}. Restoring changes.")
+            # TODO: this is wrong, we should be restoring the entire
+            #       repository to the original state before cactus ran
+            #       if some commits worked and this failed afterwards
+            run(f"git reset {previous_sha}")
+            restore_changes(full_diff)
+            sys.exit(1)
+
         logger.info(f"Auto-committing: {cluster['message']}")
         if run(f"git commit -m '{cluster['message']}'").returncode != 0:
             logger.error("Failed to commit changes. Restoring changes.")
@@ -143,120 +153,22 @@ def generate_commits(all_hunks, clusters, previous_sha, full_diff):
             sys.exit(1)
 
 
-def generate_changes(args, model):
+def generate_changes(args):
     previous_sha = run("git rev-parse --short HEAD").stdout
     full_diff = get_git_diff(args.context_size)
     patches = extract_patches(full_diff)
     prompt_data = prepare_prompt_data(full_diff)
 
-    if "gemini" in model:
-        clusters = get_clusters_from_gemini(prompt_data, args.n, model)
+    if "gemini" in args.model:
+        get_clusters_func=partial(get_clusters_from_gemini, hunks_n=len(patches), model=args.model)
     else:
-        clusters = get_clusters_from_openai(prompt_data, args.n, model)
+        get_clusters_func=partial(get_clusters_from_openai, hunks_n=len(patches), model=args.model)
 
-    def display_clusters():
-        message = f"Separated into {len(clusters)} groups of changes from {len(patches)} hunks:\n"
-        for ix, cluster in enumerate(clusters):
-            message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
-        logger.success(message)
-
-    display_clusters()
-
-    # Define choices and their corresponding shortcut keys
-    choices = [
-        {
-            'name': 'Accept', 'value': 'accept', 'key': 'c'
-        },
-        {
-            'name': 'Regenerate', 'value': 'regenerate', 'key': 'r'
-        },
-        {
-            'name': 'Increase #', 'value': 'increase', 'key': 'i'
-        },
-        {
-            'name': 'Decrease #', 'value': 'decrease', 'key': 'd'
-        },
-        {
-            'name': 'Quit', 'value': 'quit', 'key': 'q'
-        },
-    ]
-
-    # Create a key bindings object
-    kb = KeyBindings()
-
-    # Variable to store the user's choice
-    user_choice = {'value': None}
-
-    # Define key bindings for each choice
-    for choice in choices:
-
-        @kb.add(choice['key'])
-        def _(event, choice=choice):
-            user_choice['value'] = choice['value']
-            event.app.exit()
-
-    # Handle Ctrl+C as Quit
-    @kb.add('c-c')
-    def _(event):
-        user_choice['value'] = 'quit'
-        event.app.exit()
-
-    # Start a loop to keep prompting the user
-    while True:
-        print_formatted_text(HTML('<b>Select an option (press c/r/i/d/q):</b>'))
-        for choice in choices:
-            print_formatted_text(f"{choice['key']}: {choice['name']}")
-
-        try:
-            # Wait for user input (key press)
-            from prompt_toolkit.shortcuts import PromptSession
-            session = PromptSession(key_bindings=kb)
-            session.prompt('') # Empty prompt to capture key press
-        except KeyboardInterrupt:
-            logger.error("Aborted by user via Ctrl+C.")
-            sys.exit(1)
-
-        response = user_choice['value']
-
-        if response == 'accept':
-            break
-        elif response == 'regenerate':
-            if "gemini" in model:
-                clusters = get_clusters_from_gemini(prompt_data, args.n, model)
-            else:
-                clusters = get_clusters_from_openai(prompt_data, args.n, model)
-            display_clusters()
-        elif response == 'increase':
-            args.n = len(clusters) + 1 if args.n is None else args.n + 1
-            if "gemini" in model:
-                clusters = get_clusters_from_gemini(prompt_data, args.n, model)
-            else:
-                clusters = get_clusters_from_openai(prompt_data, args.n, model)
-            display_clusters()
-        elif response == 'decrease':
-            args.n = len(clusters) if args.n is None else args.n
-            if args.n <= 1:
-                logger.warning("Cannot decrease further. Minimum number of clusters is 1.")
-            else:
-                args.n -= 1
-                if "gemini" in model:
-                    clusters = get_clusters_from_gemini(prompt_data, args.n, model)
-                else:
-                    clusters = get_clusters_from_openai(prompt_data, args.n, model)
-                display_clusters()
-        elif response == 'quit':
-            logger.error("Aborted by user.")
-            sys.exit(1)
-        else:
-            logger.error("Invalid option.")
-
-        # Reset user_choice for the next iteration
-        user_choice['value'] = None
+    clusters = handle_user_input(prompt_data, args.n, get_clusters_func)
 
     # Unstage all staged changes
     logger.warning("Unstaging all staged changes and applying individual diffs...")
     run("git restore --staged .")
-    time.sleep(1)
 
     generate_commits(patches, clusters, previous_sha, full_diff)
 
@@ -350,8 +262,8 @@ def main():
     if args.action == "generate":
         if "n" not in args:
             args.n = None
-        logger.info(f"Generating commit messages using {args.model}...")
-        generate_changes(args, args.model)
+        logger.info(f"Using {args.model} to generate " + (f"{args.n} commits..." if args.n else "commit messages..."))
+        generate_changes(args)
     elif args.action == "changelog":
         generate_changelog(args, args.model)
 
