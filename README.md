@@ -4,7 +4,7 @@ Cactus is an innovative command-line tool that leverages AI to automate and enha
 
 ## Demo
 
-![Demo](demo.mp4)
+https://github.com/user-attachments/assets/bb3553db-78d5-42b1-888c-9e9e6a4edb77
 
 ## Features
 
@@ -52,6 +52,7 @@ If you want to force a specific number of commits, pass the number as an argumen
 ```shell
 cactus 3 # Will generate 3 commits
 ```
+
 
 ### Create a Changelog
 
