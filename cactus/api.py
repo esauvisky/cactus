@@ -5,7 +5,7 @@ from loguru import logger
 import openai
 import tiktoken
 
-from .constants import MODEL_TOKEN_LIMITS, PROMPT_CLASSIFICATOR_SYSTEM
+from .constants import CLASSIFICATOR_SCHEMA_GEMINI, CLASSIFICATOR_SCHEMA_OPENAI, MODEL_TOKEN_LIMITS, PROMPT_CLASSIFICATOR_SYSTEM
 
 import google.generativeai as genai
 from google.generativeai import protos
@@ -71,54 +71,41 @@ def split_into_chunks(text, model="gpt-4o"):
     return chunks
 
 
-def get_clusters_from_openai(prompt_data, clusters_n, model):
-    file_contents = "\n".join([
-        f"# {file_path}\n{file_content["content"]}\n" for file_path, file_content in prompt_data["files"].items()
-    ])
-    hunks_json = "\n".join([
-    "# Index: " + str(hunk["hunk_index"]) + "\n" + str(hunk["content"]) for hunk in prompt_data["hunks"]])
-    content = """First, review the contents of the modified files:
-
-<file_contents>
-{FILE_CONTENTS}
-</file_contents>
-
-Now, examine the JSON object containing the list of hunks:
-
-<hunks_json>
-{HUNKS_JSON}
-</hunks_json>""".format(
-        FILE_CONTENTS=file_contents, HUNKS_JSON=hunks_json) + (f"\n\nReturn a JSON with {clusters_n} commits for the hunks above."
-                                                               if clusters_n else "\n\nReturn the JSON for the hunks above.")
-
-    response = openai.chat.completions.create(
+def get_clusters_from_openai(prompt_data, clusters_n, hunks_n, model):
+    model_instance = openai.chat.completions.create(
         model=model,
         top_p=1,
         temperature=1,
-        max_tokens=16384,
-        response_format={"type": "json_object"},
+        max_tokens=1024,
+        response_format={"type": "json_schema", "json_schema": CLASSIFICATOR_SCHEMA_OPENAI}, # type: ignore
+
         messages=[
             {
                 "role": "system", "content": PROMPT_CLASSIFICATOR_SYSTEM
             },
             {
-                "role": "user", "content": content
+                "role": "user", "content": json.dumps(prompt_data) + (f"\n\nReturn a JSON with {clusters_n} commits for the hunks above."
+                                                                     if clusters_n else "\n\nReturn the JSON for the hunks above.")
             },
         ])
-    clusters = json.loads(response.choices[0].message.content)["commits"]                           # type: ignore
-    return clusters if not clusters_n or len(clusters) == clusters_n else get_clusters_from_openai(
-        prompt_data, clusters_n, model)
+    clusters = json.loads(model_instance.choices[0].message.content)["commits"]                           # type: ignore
+    sum_hunks = sum([len(cluster['hunk_indices']) for cluster in clusters])
+    if sum_hunks != hunks_n:
+        logger.warning(f"Expected {hunks_n} hunks, but got {sum_hunks}. Trying again.")
+        logger.debug(pprint.pformat(clusters))
+        return get_clusters_from_openai(prompt_data, clusters_n, hunks_n, model)
+    return clusters
 
 
-def get_clusters_from_gemini(prompt_data, clusters_n, model):
-    model = genai.GenerativeModel(
+def get_clusters_from_gemini(prompt_data, clusters_n, hunks_n, model):
+    model_instance = genai.GenerativeModel(
         model_name=model,
         generation_config={
             "temperature": 1,
-            "top_p": 0.8,
-            "top_k": 64,
+            "top_p": 1,
             "max_output_tokens": 1024,
-            "response_mime_type": "application/json"
+            "response_mime_type": "application/json",
+            "response_schema": CLASSIFICATOR_SCHEMA_GEMINI
         },                                                                                 # type: ignore
         safety_settings={
             HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
@@ -129,19 +116,16 @@ def get_clusters_from_gemini(prompt_data, clusters_n, model):
         system_instruction=PROMPT_CLASSIFICATOR_SYSTEM,
     )
 
-    chat_session = model.start_chat(history=[
-        {
-            "role": "user",
-            "parts": prompt_data,
-        },
-    ])
+    chat_session = model_instance.start_chat(history=[])
 
-    response = chat_session.send_message(f"Return a JSON with {clusters_n} commits for the hunks above."
-                                         if clusters_n else "Return the JSON for the hunks above.")
+    response = chat_session.send_message(json.dumps(prompt_data) + (f"\n\nReturn a JSON with {clusters_n} commits for the hunks above."
+                                         if clusters_n else "\n\nReturn the JSON for the hunks above."))
     content = json.loads(response.text)
     clusters = content["commits"]
 
-    if clusters_n and len(clusters) != clusters_n:
-        logger.warning(f"Expected {clusters_n} clusters, but got {len(clusters)}. Trying again.")
-        return get_clusters_from_gemini(prompt_data, clusters_n, model)
+    sum_hunks = sum([len(cluster['hunk_indices']) for cluster in clusters])
+    if sum_hunks != hunks_n:
+        logger.warning(f"Expected {hunks_n} hunks, but got {sum_hunks}. Trying again.")
+        logger.debug(pprint.pformat(clusters))
+        return get_clusters_from_gemini(prompt_data, clusters_n, hunks_n, model)
     return clusters
