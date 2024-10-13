@@ -1,6 +1,6 @@
 # Cactus: AI-Powered Commit Message Generator
 
-Cactus is an innovative command-line tool that leverages AI to automate and enhance the process of creating Git commit messages. By analyzing staged changes, Cactus generates meaningful, conventional commit messages, streamlining your version control workflow.
+Cactus is an command-line tool that leverages AI to automate and enhance the process of creating Git commit messages. By analyzing staged changes, **Cactus Automates Commits Through Uncomplicated Suggestions**.
 
 ## Demo
 
