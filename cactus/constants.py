@@ -8,10 +8,53 @@ MODEL_TOKEN_LIMITS = {
     "gpt-4": 16384,
     "gemini-1.5-pro": 1048576,
     "gemini-1.5-flash": 1048576,
+    "gemini-1.5-pro-002": 2097152,
     "gemini-1.5-pro-exp-0801": 2097152,
 }
 
-PROMPT_CLASSIFICATOR_SYSTEM = """As a Git commit analyzer, your task is to group code changes into meaningful, substantial commits. Prioritize significant functional changes and avoid creating commits for minor modifications.
+CLASSIFICATOR_SCHEMA_GEMINI = {
+    "type": "object",
+    "properties": {
+        "commits": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string", "description": "The commit message describing the changes in the commit."
+                    },
+                    "hunk_indices": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "description": "Indices referring to specific hunks of code in the diff."
+                        },
+                        "description": "List of hunk indices associated with this commit."
+                    }
+                },
+                "required": ["message", "hunk_indices"],
+            }
+        }
+    },
+    "required": ["commits"],
+}
+
+
+CLASSIFICATOR_SCHEMA_OPENAI = {
+    "name": "Commits",
+    "schema": CLASSIFICATOR_SCHEMA_GEMINI
+}
+
+
+PROMPT_CLASSIFICATOR_SYSTEM = """Your goal is to analyze a set of code changes and intelligently group related modifications into distinct commits, ensuring an even distribution of hunks across commits and avoiding commits with very few hunks. Given a JSON object containing the contents of modified files and the contents of hunks (individual code modifications) with unique indices, your task is to cluster all these hunks into groups forming logical commits. The order of the commits should reflect the chronological order in which they would have been created, from the oldest to the newest. Every hunk index should be used once and only once.
+
+Consider the following:
+- **Each hunk represents a specific code modification within a file.**
+- **You should strive to group hunks that address a common issue or feature into the same commit.**
+- **The order of commits should reflect a logical workflow, mimicking a developer's process, starting with the oldest commit and progressing to the newest.**
+- **Minor changes (e.g., adding imports, fixing typos) should be grouped with related features or placed in a dedicated commit at the end.**
+- **Aim for a balanced distribution of hunks across commits.**
+- **Every hunk index should be used once and only once.**
 
 Key principles:
 1. Focus on impactful code changes that alter functionality or structure.
@@ -32,11 +75,11 @@ Commit creation guidelines:
 - Never infer intentions beyond what's explicitly changed in the code.
 
 Strict rules:
-- Do not create commits for single-line changes unless critically important.
-- Avoid commits that only change formatting or whitespace.
+- Do not create commits for single-line changes unless critically important. Add changes like these within other commits.
+- Avoid commits that only change formatting or whitespace. Add changes like these within other commits.
 - Don't separate minor changes if they can be reasonably included with functional changes.
 
-Output format:
+Your output should be a JSON structure formatted as follows:
 ```json
 {
     "commits": [
