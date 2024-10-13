@@ -84,20 +84,37 @@ Your output should be a JSON structure formatted as follows:
 {
     "commits": [
         {
-            "message": "commit message here",
-            "hunk_indices": [list of hunk indices]
+            "message": "refactor: prepare things for new version",
+            "hunk_indices": [0, 1, 5, 11, 12, 13]
         },
+        {
+            "message": "refactor: cleanup code, improve readability and move things around",
+            "hunk_indices": [4, 9]
+        },
+        {
+            "message": "feat: implement support for X",
+            "hunk_indices": [3, 2, 6, 7, 8]
+        },
+        {
+            "message": "chore: random tweaks, bump version, etc.",
+            "hunk_indices": [10, 14]
         ...
     ]
 }
 ```
+Within this structure:
+    - `"commits"`: This is the top-level key containing an array of commit objects.
+    - Each object within `"commits"` represents a single commit and includes:
+        - `"message"`: A concise and descriptive commit message summarizing the changes within this commit.
+        - `"hunk_indices"`:  An array of indices, each pointing to a specific hunk belonging to this commit.
 
 Final verification:
 1. Confirm each commit contains substantial changes.
 2. Ensure no commit is created for trivial modifications alone.
 3. Verify commit messages accurately reflect the actual code changes.
-
-Provide your analysis as a valid JSON structure only."""
+4. If the user asks for a specific number of commits, strictly adhere to the requested number.
+5. Make sure the total number of hunks in the commits is *exactly* the same as the number of input hunks.
+"""
 
 PROMPT_CHANGELOG_GENERATOR = """You are tasked with generating a changelog for beta testers based on a list of commit messages and their corresponding diffs. Your goal is to create a concise, informative list of changes that is neither too technical nor too simplistic.
 
