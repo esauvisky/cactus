@@ -113,9 +113,14 @@ def prepare_prompt_data(diff_data):
         for hunk in patched_file:
             hunk_content = str(hunk)
             # Decode hunk content for the language model, replacing errors
-            hunk_content_decoded = hunk_content.encode('latin-1').decode('utf-8', errors='replace')
+            hunk_content_decoded = header
+            hunk_content_decoded += hunk_content.encode('latin-1').decode('utf-8', errors='replace')
             prompt_data["hunks"].append({"hunk_index": hunk_index, "content": hunk_content_decoded})
             hunk_index += 1
+
+    if len(prompt_data["hunks"]) != sum([len(patch) for patch in patch_set]):
+        logger.error(f"Expected {len(patch_set)} hunks, but got {len(prompt_data['hunks'])}. Exiting.")
+        sys.exit(1)
 
     return prompt_data
 
