@@ -91,8 +91,7 @@ def prepare_prompt_data(diff_data):
 
     for patched_file in patch_set:
         file_path = patched_file.path
-        prompt_data["files"][file_path] = {}
-        prompt_data["files"][file_path]["content"] = str("".join(list(patched_file.patch_info)[:-1])).strip() + '\n'
+        prompt_data["files"][file_path] = {"content": "", "hunks": []}
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -108,6 +107,7 @@ def prepare_prompt_data(diff_data):
         if len(patched_file) == 0:
             logger.info(f"No hunks found for {file_path}.")
             prompt_data["hunks"].append({"hunk_index": hunk_index, "content": header})
+            hunk_index += 1
             continue
 
         for hunk in patched_file:
@@ -118,8 +118,9 @@ def prepare_prompt_data(diff_data):
             prompt_data["hunks"].append({"hunk_index": hunk_index, "content": hunk_content_decoded})
             hunk_index += 1
 
-    if len(prompt_data["hunks"]) != sum([len(patch) for patch in patch_set]):
-        logger.error(f"Expected {len(patch_set)} hunks, but got {len(prompt_data['hunks'])}. Exiting.")
+    total_hunks = sum([len(patched_file) or 1 for patched_file in patch_set])
+    if total_hunks != len(prompt_data["hunks"]):
+        logger.error(f"Expected {total_hunks} hunks, but got {len(prompt_data['hunks'])}. Exiting.")
         sys.exit(1)
 
     return prompt_data
