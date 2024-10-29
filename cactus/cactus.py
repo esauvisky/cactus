@@ -51,46 +51,23 @@ def extract_patches(diff_data):
             continue  # Skip binary files
 
         file_headers = []
+        file_headers.append(str("".join(list(patched_file.patch_info)[:-1])).strip())
 
-        # Determine the actual file path for the diff --git header
-        # Git expects 'diff --git a/path/to/file b/path/to/file' even for added/deleted files
-        file_path = patched_file.path
+        if patched_file.is_modified_file:
+            file_headers.append(f'--- {patched_file.source_file}')
+            file_headers.append(f'+++ {patched_file.target_file}')
 
-        # Build the 'diff --git' header
-        file_headers.append(f'diff --git a/{file_path} b/{file_path}')
+        file_header_text = '\n'.join(file_headers)
 
-        if patched_file.is_rename:
-            # Handle file renames
-            file_headers.append(f'rename from {patched_file.source_file}')
-            file_headers.append(f'rename to {patched_file.target_file}')
-        else:
-            # Determine if the file is added, deleted, or modified
-            is_added = patched_file.source_file == '/dev/null'
-            is_deleted = patched_file.target_file == '/dev/null'
-
-            if is_added:
-                # For added files, '---' is /dev/null and '+++' is the new file
-                file_headers.append('new file mode 100644')  # Optional: include file mode
-                file_headers.append(f'--- /dev/null')
-                file_headers.append(f'+++ b/{file_path}')
-            elif is_deleted:
-                # For deleted files, '---' is the old file and '+++' is /dev/null
-                file_headers.append('deleted file mode 100644')  # Optional: include file mode
-                file_headers.append(f'--- a/{file_path}')
-                file_headers.append(f'+++ /dev/null')
-            else:
-                # For modified files, both '---' and '+++' reference the file
-                # # Optionally, include the index line with file modes
-                # if patched_file.source_revision and patched_file.target_revision:
-                #     file_headers.append(f'index {patched_file.source_revision}..{patched_file.target_revision} {patched_file.source_mode}')
-                file_headers.append(f'--- a/{file_path}')
-                file_headers.append(f'+++ b/{file_path}')
-
-        file_header_text = '\n'.join(file_headers) + '\n'
+        if len(patched_file) == 0:
+            logger.info(f"No hunks found for {patched_file.path}.")
+            patch_bytes = file_header_text.encode('latin-1')
+            patches.append(patch_bytes)
+            continue
 
         for hunk in patched_file:
             hunk_text = str(hunk)
-            patch_text = file_header_text + hunk_text
+            patch_text = file_header_text + '\n' + hunk_text
             patch_bytes = patch_text.encode('latin-1')
             patches.append(patch_bytes)
 
@@ -114,13 +91,24 @@ def prepare_prompt_data(diff_data):
 
     for patched_file in patch_set:
         file_path = patched_file.path
+        prompt_data["files"][file_path] = {}
+        prompt_data["files"][file_path]["content"] = str("".join(list(patched_file.patch_info)[:-1])).strip() + '\n'
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-        except (UnicodeDecodeError, FileNotFoundError) as e:
+        except (UnicodeDecodeError) as e:
             logger.warning(f"Failed to read file {file_path}: {str(e)}")
-            content = "[BINARY FILE]" if isinstance(e, UnicodeDecodeError) else "File Not Found (Probably Renamed)"
-        prompt_data["files"][file_path] = {"content": content}
+            content = "[BINARY FILE]"
+        except FileNotFoundError as e:
+            logger.warning(f"Failed to read file {file_path}: {str(e)}")
+            content = "File Not Found"
+        prompt_data["files"][file_path]["content"] += content
+
+        header = str("".join(list(patched_file.patch_info)[:-1])).strip() + '\n'
+        if len(patched_file) == 0:
+            logger.info(f"No hunks found for {file_path}.")
+            prompt_data["hunks"].append({"hunk_index": hunk_index, "content": header})
+            continue
 
         for hunk in patched_file:
             hunk_content = str(hunk)
