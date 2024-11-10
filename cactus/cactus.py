@@ -80,59 +80,52 @@ def extract_patches(diff_data):
 
 def prepare_prompt_data(diff_data):
     """
-    Prepares the prompt data for the language model from the diff data.
+    Prepares the prompt data in specific format from the diff data.
     """
     diff_text = diff_data.decode('latin-1')
-    prompt_data = {"files": {}, "hunks": []}
-    hunk_index = 0
+    file_data = []
+    hunk_data = []
 
     try:
         patch_set = PatchSet.from_string(diff_text)
     except Exception as e:
         logger.error(f"Failed to parse diff data: {e}")
-        return json.dumps(prompt_data)
+        return ""
 
+    hunk_index = 1
+    # Prepare files and hunks section
     for patched_file in patch_set:
         file_path = patched_file.path
-        prompt_data["files"][file_path] = {"content": "", "hunks": []}
+        file_data.append(f"\n# FILE: {file_path}")
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except (UnicodeDecodeError) as e:
-            logger.warning(f"Failed to read file {file_path}: {str(e)}")
-            content = "[BINARY FILE]"
-        except FileNotFoundError as e:
-            logger.warning(f"Failed to read file {file_path}: {str(e)}")
-            content = "File Not Found"
-        prompt_data["files"][file_path]["content"] += content
+                content_lines = f.readlines()
+        except UnicodeDecodeError:
+                logger.warning(f"Failed to read file {file_path} due to binary content.")
+                content_lines = ["### [BINARY FILE]"]
+        except FileNotFoundError:
+                logger.warning(f"File not found: {file_path}")
+                content_lines = ["### File Not Found"]
 
-        header = str("".join(list(patched_file.patch_info)[:-1])).strip() + '\n'
-        if len(patched_file) == 0:
-            logger.info(f"No hunks found for {file_path}.")
-            prompt_data["hunks"].append({"hunk_index": hunk_index, "content": header})
-            hunk_index += 1
-            continue
+        for line in content_lines:
+            line = line.rstrip('\n')
+            file_data.append(f"FILE: {line}")
 
         for hunk in patched_file:
-            hunk_content = str(hunk)
-            # Decode hunk content for the language model, replacing errors
-            hunk_content_decoded = header
-            hunk_content_decoded += hunk_content.encode('latin-1').decode('utf-8', errors='replace')
-            prompt_data["hunks"].append({"hunk_index": hunk_index, "content": hunk_content_decoded})
+            hunk_lines = [line.encode('latin-1').decode('utf-8', errors='replace') for line in str(hunk).splitlines()]
+            hunk_data.append(f"\n## HUNK {hunk_index} ({file_path})")
+            for line in hunk_lines:
+                hunk_data.append(f"HUNK: {line}")
             hunk_index += 1
 
-    total_hunks = sum([len(patched_file) or 1 for patched_file in patch_set])
-    if total_hunks != len(prompt_data["hunks"]):
-        logger.error(f"Expected {total_hunks} hunks, but got {len(prompt_data['hunks'])}. Exiting.")
-        sys.exit(1)
-
-    return prompt_data
+    prompt_data = file_data + hunk_data
+    return "\n".join(prompt_data)
 
 
 def generate_commits(all_hunks, clusters, previous_sha, full_diff):
     for cluster in clusters:
         try:
-            stage_changes([all_hunks[i] for i in cluster["hunk_indices"]])
+            stage_changes([all_hunks[i - 1] for i in cluster["hunk_indices"]])
         except Exception as e:
             logger.error(f"Failed to stage changes: {e}. Restoring changes.")
             # TODO: this is wrong, we should be restoring the entire
