@@ -2,6 +2,7 @@
 """
 CACTUS Automates Commits Through Uncomplicated Suggestions
 """
+__version__ = "4.4.0"
 
 import argparse
 from functools import partial
@@ -14,14 +15,16 @@ from loguru import logger
 import openai
 import google.generativeai as genai
 
-from .api import get_clusters_from_gemini, get_clusters_from_openai, load_api_key, setup_api_key
-from .changelog import generate_changelog
-from .utils import setup_logging
-from .git_utils import run, get_git_diff, restore_changes, parse_diff, stage_changes
-from .grouper import parse_diff, stage_changes
-import os
-import re
-import json
+import os  # Added to handle relative imports
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))  # Add
+
+from api import get_clusters_from_gemini, get_clusters_from_openai, load_api_key, setup_api_key
+from changelog import generate_changelog
+from utils import setup_logging
+from git_utils import run, get_git_diff, restore_changes, parse_diff, stage_changes
+from grouper import parse_diff, stage_changes
+
 from unidiff import PatchSet
 from loguru import logger
 
