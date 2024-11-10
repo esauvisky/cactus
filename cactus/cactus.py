@@ -226,6 +226,9 @@ def main():
     else:
         setup_logging("INFO")
 
+    logger.info(f"Running cactus version {__version__}")
+
+
     if args.action == "setup":
         setup_api_key(args.api)
         sys.exit(0)
