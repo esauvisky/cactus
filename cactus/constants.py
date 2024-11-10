@@ -113,6 +113,27 @@ Final verification:
 3. Verify commit messages accurately reflect the actual code changes.
 4. If the user asks for a specific number of commits, strictly adhere to the requested number.
 5. Make sure the total number of hunks in the commits is *exactly* the same as the number of input hunks.
+
+If you cannot put hunks into commits in a logical order because some hunks contain code related to multiple commits,
+split them into more commits in order to keep the order consistent with the development flow for the project.
+For example:
+```json
+{
+    "commits": [
+        {
+            "message": "feat: add JSON schema for classification",
+            "hunk_indices": [2]
+        },
+        {
+            "message": "feat: add YAML schema for classification",
+            "hunk_indices": [3]
+        },
+        {
+            "message": "feat: implement new CLI arguments for JSON and YAML schemas",
+            "hunk_indices": [1, 4]
+        },
+        // ...
+```
 """
 
 PROMPT_CHANGELOG_GENERATOR = """You are tasked with generating a changelog for beta testers based on a list of commit messages and their corresponding diffs. Your goal is to create a concise, informative list of changes that is neither too technical nor too simplistic.
