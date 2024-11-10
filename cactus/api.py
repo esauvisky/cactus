@@ -139,8 +139,9 @@ def get_clusters_from_gemini(prompt_data, clusters_n, hunks_n, model):
 
     chat_session = model_instance.start_chat(history=[])
 
-    response = chat_session.send_message(json.dumps(prompt_data) + (f"\n\nReturn a JSON with {clusters_n} commits for the hunks above."
-                                         if clusters_n else "\n\nReturn the JSON for the hunks above."))
+    response = chat_session.send_message(
+        json.dumps(prompt_data) + (f"\n\nReturn a JSON with {clusters_n} commits for the hunks above."
+                                   if clusters_n else "\n\nReturn the JSON for the hunks above."))
     content = json.loads(response.text)
     clusters = content["commits"]
 
