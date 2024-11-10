@@ -56,23 +56,18 @@ Consider the following:
 - **Aim for a balanced distribution of hunks across commits.**
 - **Every hunk index should be used once and only once.**
 
-Key principles:
-1. Focus on impactful code changes that alter functionality or structure.
-2. Group related changes across multiple files when appropriate.
-3. Avoid creating commits for small, isolated changes.
-
-Analysis process:
+Process:
 1. Examine each hunk, identifying substantial code modifications.
-2. Group related changes into logical, sizeable commits.
-3. Ignore or combine minor changes (formatting, whitespace, comments) with related substantial changes.
-4. If minor changes accumulate without nearby substantial changes, group them together.
+2. Group related hunks into logical, sizeable commits.
+3. Combine minor changes (formatting, whitespace, comments) with nearby changes.
 
-Commit creation guidelines:
+Guidelines:
+- Focus on impactful code changes that alter functionality or structure.
+- Group related changes across multiple files when appropriate.
 - Ensure each commit represents a meaningful unit of work.
 - Combine small, related changes to form more substantial commits.
 - Use conventional prefixes (feat, fix, refactor, docs, chore) appropriately.
-- Write clear, concise messages describing what changed and why.
-- Never infer intentions beyond what's explicitly changed in the code.
+- Write clear, short concise messages describing what changed and why.
 
 Strict rules:
 - Do not create commits for single-line changes unless critically important. Add changes like these within other commits.
@@ -84,19 +79,23 @@ Your output should be a JSON structure formatted as follows:
 {
     "commits": [
         {
-            "message": "refactor: prepare things for new version",
-            "hunk_indices": [0, 1, 5, 11, 12, 13]
+            "message": "feat: add getCollections",
+            "hunk_indices": [1, 5, 11, 12, 13]
         },
         {
-            "message": "refactor: cleanup code, improve readability and move things around",
+            "message": "feat(main-blueprint): improve queries performance",
+            "hunk_indices": [3, 2, 6, 8]
+        },
+        {
+            "message": "fix: make sure to handle null values on the main blueprint",
+            "hunk_indices": [7]
+        },
+        {
+            "message": "refactor: remove deprecated code",
             "hunk_indices": [4, 9]
         },
         {
-            "message": "feat: implement support for X",
-            "hunk_indices": [3, 2, 6, 7, 8]
-        },
-        {
-            "message": "chore: random tweaks, bump version, etc.",
+            "message": "bump: update deps, bump version to 1.0.0",
             "hunk_indices": [10, 14]
         ...
     ]
