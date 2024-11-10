@@ -71,28 +71,49 @@ def split_into_chunks(text, model="gpt-4o"):
     return chunks
 
 
+def get_initial_messages(prompt_data, clusters_n, hunks_n, model) -> list:
+    if "o1" in model:
+        return [
+            {
+                "role": "user",
+                "content": PROMPT_CLASSIFICATOR_SYSTEM
+                    + prompt_data + "\n## PROMPT\nGroup the hunks above into " +
+                      (f"exactly **{clusters_n}** commits" if clusters_n else "at least 1 commit")
+                    + f" encompassing logically related hunks each, for all the **{hunks_n}** hunks above. Use every single hunk once and only once."
+                    + " Closely follow the instructions and format the output as a JSON array of commits."
+            },
+        ]
+    else:
+        return [
+            {
+                "role": "system", "content": PROMPT_CLASSIFICATOR_SYSTEM
+            },
+            {
+                "role": "user",
+                "content": prompt_data + "\n## PROMPT\nGroup the hunks above into " +
+                           (f"exactly **{clusters_n}** commits" if clusters_n else "at least 1 commit")
+                            + f" encompassing logically related hunks each, for all the **{hunks_n}** hunks above. Use every single hunk once and only once."
+                            + " Closely follow the instructions and format the output as a JSON array of commits."
+            },
+        ]
+
+
 def get_clusters_from_openai(prompt_data, clusters_n, hunks_n, model):
     model_instance = openai.chat.completions.create(
         model=model,
         top_p=1,
         temperature=1,
         max_tokens=1024,
-        response_format={"type": "json_schema", "json_schema": CLASSIFICATOR_SCHEMA_OPENAI}, # type: ignore
-
-        messages=[
-            {
-                "role": "system", "content": PROMPT_CLASSIFICATOR_SYSTEM
-            },
-            {
-                "role": "user", "content": json.dumps(prompt_data) + (f"\n\nReturn a JSON with {clusters_n} commits for the hunks above."
-                                                                     if clusters_n else "\n\nReturn the JSON for the hunks above.")
-            },
-        ])
-    clusters = json.loads(model_instance.choices[0].message.content)["commits"]                           # type: ignore
+        response_format={
+            "type": "json_schema", "json_schema": CLASSIFICATOR_SCHEMA_OPENAI
+        },                                                                        # type: ignore
+        messages=get_initial_messages(prompt_data, clusters_n, hunks_n, model))
+    logger.debug(get_initial_messages(prompt_data, clusters_n, hunks_n, model))
+    clusters = json.loads(model_instance.choices[0].message.content)["commits"]   # type: ignore
     sum_hunks = sum([len(cluster['hunk_indices']) for cluster in clusters])
     if sum_hunks != hunks_n:
-        logger.warning(f"Expected {hunks_n} hunks, but got {sum_hunks}. Trying again.")
         logger.debug(pprint.pformat(clusters))
+        logger.warning(f"Expected {hunks_n} hunks, but got {sum_hunks}. Trying again.")
         return get_clusters_from_openai(prompt_data, clusters_n, hunks_n, model)
     return clusters
 
