@@ -31,7 +31,7 @@ from loguru import logger
 from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.styles import Style
-from .prompt import display_clusters, handle_user_input
+from prompt import display_clusters, handle_user_input
 
 
 def extract_patches(diff_data):
