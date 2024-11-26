@@ -46,94 +46,149 @@ CLASSIFICATOR_SCHEMA_OPENAI = {
 }
 
 
-PROMPT_CLASSIFICATOR_SYSTEM = """Your goal is to analyze a set of code changes and intelligently group related modifications into distinct commits, ensuring an even distribution of hunks across commits and avoiding commits with very few hunks. Given a JSON object containing the contents of modified files and the contents of hunks (individual code modifications) with unique indices, your task is to cluster all these hunks into groups forming logical commits. The order of the commits should reflect the chronological order in which they would have been created, from the oldest to the newest. Every hunk index should be used once and only once.
+PROMPT_CLASSIFICATOR_SYSTEM = """
+Your goal is to analyze a set of code changes and intelligently group related modifications into distinct commits. Aim for an even distribution of hunks across commits while avoiding commits with very few hunks. The input will be structured with **FILES** containing the entire contents of the modified files and **HUNKS** representing the diffs of the changes.
 
-Consider the following:
-- **Each hunk represents a specific code modification within a file.**
-- **You should strive to group hunks that address a common issue or feature into the same commit.**
-- **The order of commits should reflect a logical workflow, mimicking a developer's process, starting with the oldest commit and progressing to the newest.**
-- **Minor changes (e.g., adding imports, fixing typos) should be grouped with related features or placed in a dedicated commit at the end.**
-- **Aim for a balanced distribution of hunks across commits.**
-- **Every hunk index should be used once and only once.**
+Your task is to:
 
-Process:
-1. Examine each hunk, identifying substantial code modifications.
-2. Group related hunks into logical, sizeable commits.
-3. Combine minor changes (formatting, whitespace, comments) with nearby changes.
+- Cluster all hunks into logical commits.
+- Reflect the chronological order of commits, from oldest to newest.
+- Use every hunk index exactly once.
 
-Guidelines:
-- Focus on impactful code changes that alter functionality or structure.
-- Group related changes across multiple files when appropriate.
-- Ensure each commit represents a meaningful unit of work.
-- Combine small, related changes to form more substantial commits.
-- Use conventional prefixes (feat, fix, refactor, docs, chore) appropriately.
-- Write clear, short concise messages describing what changed and why.
+### Input Format:
 
-Strict rules:
-- Do not create commits for single-line changes unless critically important. Add changes like these within other commits.
-- Avoid commits that only change formatting or whitespace. Add changes like these within other commits.
-- Don't separate minor changes if they can be reasonably included with functional changes.
+```
+###############
+#### FILES ####
+###############
+./path/to/file1.py
+FILE:
+<Entire contents of file1.py>
+...
 
-Your output should be a JSON structure formatted as follows:
+./path/to/file2.py
+FILE:
+<Entire contents of file2.py>
+...
+
+###############
+#### HUNKS ####
+###############
+Total hunks: N
+
+Index: 1
+HUNK:
+@@ -start_line,count +start_line,count @@
+--- a/path/to/file1.py
++++ b/path/to/file1.py
+<diff content>
+...
+
+Index: 2
+HUNK:
+@@ -start_line,count +start_line,count @@
+--- a/path/to/file2.py
++++ b/path/to/file2.py
+<diff content>
+...
+
+...
+```
+
+- **FILES**: Each modified file with its full path, followed by `FILE:` and its entire content.
+- **HUNKS**: Each hunk with a unique `Index` and the corresponding diff under `HUNK:`.
+
+### Considerations:
+
+- **Hunks**: Each represents a specific code modification within a file.
+- **Grouping**: Strive to group hunks addressing a common issue or feature.
+- **Order**: Commits should mimic a developer's workflow, from oldest to newest.
+- **Minor Changes**: Combine minor changes with related features or place them in a dedicated commit at the end.
+- **Balance**: Aim for an even distribution of hunks across commits.
+- **Usage**: Every hunk index must be used once and only once.
+
+### Process:
+
+1. **Examine Each Hunk**: Identify substantial code modifications.
+2. **Group Related Hunks**: Cluster hunks into logical, sizeable commits.
+3. **Combine Minor Changes**: Merge minor tweaks (formatting, whitespace) with related changes.
+
+### Guidelines:
+
+- **Focus**: On impactful changes altering functionality or structure.
+- **Cross-File Grouping**: Group related changes across multiple files when appropriate.
+- **Meaningful Units**: Ensure each commit represents a meaningful unit of work.
+- **Combine Small Changes**: Form substantial commits by combining small, related changes.
+- **Conventional Prefixes**: Use prefixes like `feat:`, `fix:`, `refactor:`, `docs:`, `chore:` appropriately.
+- **Clear Messages**: Write concise messages describing what changed and why.
+
+### Strict Rules:
+
+- **Avoid Trivial Commits**: Do not create commits for single-line changes unless critically important. Include these within other commits.
+- **No Formatting-Only Commits**: Do not create commits that only change formatting or whitespace. Integrate these changes into other commits.
+- **Logical Grouping**: Don't separate minor changes if they can reasonably be included with functional changes.
+- **Consistency**: Ensure all hunks are used once, maintaining logical consistency in commit grouping.
+
+### Output Format:
+
+Provide your result in the following JSON structure:
+
 ```json
 {
     "commits": [
         {
-            "message": "feat: add getCollections",
-            "hunk_indices": [1, 5, 11, 12, 13]
+            "message": "<commit_message_1>",
+            "hunk_indices": [<hunk_index_1>, <hunk_index_2>, ...]
         },
         {
-            "message": "feat(main-blueprint): improve queries performance",
-            "hunk_indices": [3, 2, 6, 8]
+            "message": "<commit_message_2>",
+            "hunk_indices": [<hunk_index_3>, <hunk_index_4>, ...]
         },
-        {
-            "message": "fix: make sure to handle null values on the main blueprint",
-            "hunk_indices": [7]
-        },
-        {
-            "message": "refactor: remove deprecated code",
-            "hunk_indices": [4, 9]
-        },
-        {
-            "message": "bump: update deps, bump version to 1.0.0",
-            "hunk_indices": [10, 14]
         ...
     ]
 }
 ```
-Within this structure:
-    - `"commits"`: This is the top-level key containing an array of commit objects.
-    - Each object within `"commits"` represents a single commit and includes:
-        - `"message"`: A concise and descriptive commit message summarizing the changes within this commit.
-        - `"hunk_indices"`:  An array of indices, each pointing to a specific hunk belonging to this commit.
 
-Final verification:
-1. Confirm each commit contains substantial changes.
-2. Ensure no commit is created for trivial modifications alone.
-3. Verify commit messages accurately reflect the actual code changes.
-4. If the user asks for a specific number of commits, strictly adhere to the requested number.
-5. Make sure the total number of hunks in the commits is *exactly* the same as the number of input hunks.
+#### Example:
 
-If you cannot put hunks into commits in a logical order because some hunks contain code related to multiple commits,
-split them into more commits in order to keep the order consistent with the development flow for the project.
-For example:
 ```json
 {
     "commits": [
         {
-            "message": "feat: add JSON schema for classification",
-            "hunk_indices": [2]
+            "message": "feat: implement user authentication",
+            "hunk_indices": [1, 4, 6]
         },
         {
-            "message": "feat: add YAML schema for classification",
-            "hunk_indices": [3]
+            "message": "fix: resolve issue with login validation",
+            "hunk_indices": [2, 5]
         },
         {
-            "message": "feat: implement new CLI arguments for JSON and YAML schemas",
-            "hunk_indices": [1, 4]
-        },
-        // ...
+            "message": "refactor: optimize database queries",
+            "hunk_indices": [3, 7]
+        }
+    ]
+}
 ```
+
+- **"commits"**: An array containing commit objects.
+- **"message"**: A descriptive commit message.
+- **"hunk_indices"**: An array of indices corresponding to the hunks included in that commit.
+
+### Final Verification:
+
+Before finalizing, ensure that:
+
+1. **Substantial Commits**: Each commit contains substantial changes.
+2. **No Trivial-Only Commits**: Commits are not created for trivial modifications alone.
+3. **Accurate Messages**: Commit messages accurately reflect the actual code changes.
+4. **All Hunks Used Once**: Every hunk index from the input is used exactly once.
+5. **Logical Order**: Commits are in logical chronological order.
+
+### Additional Notes:
+
+- If a hunk could belong to multiple commits, assign it where it fits best to maintain the logical flow.
+- Ensure that overlapping changes are handled properly, possibly splitting them for consistency.
+- Use the context from the **FILES** and **HUNKS** sections to make informed decisions.
 """
 
 PROMPT_CHANGELOG_GENERATOR = """You are tasked with generating a changelog for beta testers based on a list of commit messages and their corresponding diffs. Your goal is to create a concise, informative list of changes that is neither too technical nor too simplistic.
