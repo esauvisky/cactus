@@ -9,7 +9,7 @@ import openai
 
 def generate_changelog(args, model):
     # get list of commit messages from args.sha to HEAD
-    commit_messages = [msg for msg in run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.split("\n") if msg]
+    commit_messages = [msg for msg in run(f"git log --pretty=format:'%s' {args.sha}..HEAD").stdout.decode('utf-8').split("\n") if msg]
 
     # prepare exclude patterns for git diff
     pathspec = f"-- {args.pathspec}" if args.pathspec else ''
@@ -17,9 +17,9 @@ def generate_changelog(args, model):
     # get git diff from args.sha to HEAD
     result = run(f"git diff --ignore-all-space --ignore-blank-lines -U{args.context_size} {args.sha} {pathspec}")
     if result.returncode != 0:
-        logger.error(f"An error occurred while getting git diff: {result.stderr}")
+        logger.error(f"An error occurred while getting git diff: {result.stderr.decode('utf-8')}")
         sys.exit(1)
-    diff = result.stdout
+    diff = result.stdout.decode('utf-8')
 
     # Split the diff into chunks if it exceeds the token limit
     chunks = split_into_chunks(diff, model)
