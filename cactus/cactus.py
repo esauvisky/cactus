@@ -49,9 +49,6 @@ def extract_patches(diff_data):
         return []
 
     for patched_file in patch_set:
-        if patched_file.is_binary_file:
-            logger.warning(f"Skipping binary file {patched_file.path}")
-            continue  # Skip binary files
 
         file_headers = []
         file_headers.append(str("".join(list(patched_file.patch_info)[:-1])).strip())
@@ -61,6 +58,12 @@ def extract_patches(diff_data):
             file_headers.append(f'+++ {patched_file.target_file}')
 
         file_header_text = '\n'.join(file_headers)
+
+        if patched_file.is_binary_file:
+            logger.info(f"Skipping binary file {patched_file.path}")
+            patch_bytes = file_header_text.encode('latin-1')
+            patches.append(patch_bytes)
+            continue  # Skip binary files
 
         if len(patched_file) == 0:
             logger.info(f"No hunks found for {patched_file.path}.")
