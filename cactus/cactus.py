@@ -188,7 +188,7 @@ def main():
         "-m",
         "--model",
         action="store",
-        default="gpt-4o-mini",
+        default="gemini-2.0-flash-lite",
         help="Model used for the generations",
     )
     PARSERS = PARSER.add_subparsers(title="subcommands", dest="action")

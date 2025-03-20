@@ -10,6 +10,7 @@ MODEL_TOKEN_LIMITS = {
     "gemini-1.5-flash": 1048576,
     "gemini-1.5-pro-002": 2097152,
     "gemini-1.5-pro-exp-0801": 2097152,
+    "gemini-2.0-flash-lite": 2097152,
 }
 
 CLASSIFICATOR_SCHEMA_GEMINI = {
