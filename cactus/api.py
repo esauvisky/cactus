@@ -122,9 +122,9 @@ def get_clusters_from_gemini(prompt_data, clusters_n, hunks_n, model):
     model_instance = genai.GenerativeModel(
         model_name=model,
         generation_config={
-            "temperature": 1,
-            "top_p": 1,
-            "max_output_tokens": 1024,
+            "temperature": 0.5,
+            "top_p": 0.8,
+            "max_output_tokens": 4096,
             "response_mime_type": "application/json",
             "response_schema": CLASSIFICATOR_SCHEMA_GEMINI
         },                                                                                 # type: ignore
@@ -140,8 +140,11 @@ def get_clusters_from_gemini(prompt_data, clusters_n, hunks_n, model):
     chat_session = model_instance.start_chat(history=[])
 
     response = chat_session.send_message(
-        json.dumps(prompt_data) + (f"\n\nReturn a JSON with {clusters_n} commits for the hunks above."
-                                   if clusters_n else "\n\nReturn the JSON for the hunks above."))
+
+    json.dumps(prompt_data) + "\n## PROMPT\nGroup the hunks above into " +
+               (f"exactly **{clusters_n}** commits" if clusters_n else "at least 1 commit")
+                + f" encompassing logically related hunks each, for all the **{hunks_n}** hunks above. Use every single hunk once and only once."
+                + " Closely follow the instructions and format the output as a JSON array of commits.")
     content = json.loads(response.text)
     clusters = content["commits"]
 
