@@ -8,10 +8,13 @@ import sys
 
 def display_clusters(clusters):
     n_hunks = sum([len(cluster['hunk_indices']) for cluster in clusters])
-    message = f"Grouped {n_hunks} hunks into {len(clusters)} commits:\n"
+    logger.info(f"Grouped {n_hunks} hunks into {len(clusters)} commits:\n")
     for ix, cluster in enumerate(clusters):
-        message += f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}\n"
-    logger.success(message)
+        commit_line = f"- Commit {ix} ({len(cluster['hunk_indices'])} hunks): {cluster['message']}"
+        message_lines = commit_line.split('\n')
+        logger.success(message_lines[0], color="green")
+        for line in message_lines[1:]:
+            logger.debug(line, color="gray")
 
 def handle_user_input(prompt_data, clusters_n, get_clusters_func):
     choices = [
