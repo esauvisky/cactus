@@ -122,8 +122,8 @@ def get_clusters_from_gemini(prompt_data, clusters_n, hunks_n, model):
     model_instance = genai.GenerativeModel(
         model_name=model,
         generation_config={
-            "temperature": 0.5,
-            "top_p": 0.8,
+            "temperature": 1.1,
+            "top_p": 1,
             "max_output_tokens": 4096,
             "response_mime_type": "application/json",
             "response_schema": CLASSIFICATOR_SCHEMA_GEMINI

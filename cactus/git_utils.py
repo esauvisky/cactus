@@ -13,7 +13,7 @@ def get_git_diff(context_size):
         sys.exit(1)
 
     result = run(
-        f"git diff --inter-hunk-context={context_size} --unified={context_size} --minimal -p --staged --binary",
+        f"git diff --inter-hunk-context={context_size} --function-context --unified={context_size} --minimal -p --staged --binary",
         capture_output=True)
     if result.returncode != 0:
         logger.error(f"Failed to get git diff: {result.stderr.decode('utf-8', errors='ignore')}")
