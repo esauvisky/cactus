@@ -2,7 +2,7 @@
 """
 CACTUS Automates Commits Through Uncomplicated Suggestions
 """
-__version__ = "4.4.0"
+__version__ = "4.5.0"
 
 import argparse
 from functools import partial
