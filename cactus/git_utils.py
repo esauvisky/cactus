@@ -4,7 +4,7 @@ import sys
 import tempfile
 from loguru import logger
 from unidiff import PatchSet, UnidiffParseError
-from utils import run
+from .utils import run
 
 
 def get_git_diff(context_size):

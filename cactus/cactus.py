@@ -19,11 +19,11 @@ import os  # Added to handle relative imports
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))  # Add
 
-from api import get_clusters_from_gemini, get_clusters_from_openai, load_api_key, setup_api_key
-from changelog import generate_changelog
-from utils import setup_logging
-from git_utils import run, get_git_diff, restore_changes, parse_diff, stage_changes
-from grouper import parse_diff, stage_changes
+from .api import get_clusters_from_gemini, get_clusters_from_openai, load_api_key, setup_api_key
+from .changelog import generate_changelog
+from .utils import setup_logging
+from .git_utils import run, get_git_diff, restore_changes, parse_diff, stage_changes
+from .grouper import parse_diff, stage_changes
 
 from unidiff import PatchSet
 from loguru import logger
@@ -31,8 +31,7 @@ from loguru import logger
 from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.styles import Style
-from prompt import display_clusters, handle_user_input
-
+from .prompt import display_clusters, handle_user_input
 
 def extract_patches(diff_data):
     """

@@ -1,9 +1,9 @@
 import sys
 from loguru import logger
 
-from constants import MODEL_TOKEN_LIMITS, PROMPT_CHANGELOG_GENERATOR, PROMPT_CHANGELOG_SYSTEM
-from api import num_tokens_from_string, split_into_chunks
-from utils import run
+from .constants import MODEL_TOKEN_LIMITS, PROMPT_CHANGELOG_GENERATOR, PROMPT_CHANGELOG_SYSTEM
+from .api import num_tokens_from_string, split_into_chunks
+from .utils import run
 import google.generativeai as genai
 import openai
 
