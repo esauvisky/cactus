@@ -28,7 +28,7 @@ def get_git_diff(context_size):
 def restore_changes(full_diff):
     with open("/tmp/cactus.diff", "wb") as f:
         f.write(full_diff)
-        run("git apply --cached --unidiff-zero --ignore-whitespace --whitespace=fix /tmp/cactus.diff")
+        run("git apply --cached --unidiff-zero /tmp/cactus.diff")
 
 
 def parse_diff(git_diff):
@@ -50,7 +50,7 @@ def stage_changes(hunks):
             fd.write(b'\n')
 
     result = subprocess.run(
-        f'git apply --cached --unidiff-zero --ignore-whitespace --whitespace=fix {filename}',
+        f'git apply --cached --unidiff-zero {filename}',
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE)
