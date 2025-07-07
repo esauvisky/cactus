@@ -188,7 +188,7 @@ def main():
         "-m",
         "--model",
         action="store",
-        default="gemini-2.0-flash-lite",
+        default="gemini-2.5-flash-preview-05-20",
         help="Model used for the generations",
     )
     PARSERS = PARSER.add_subparsers(title="subcommands", dest="action")
