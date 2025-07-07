@@ -8,7 +8,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="cactus-commit",
-    version="4.5.0",
+    version="4.6.1",
     author="@emi",
     author_email="esauvisky@gmail.com",
     description="A tool for streamlined commit messaging using AI",
