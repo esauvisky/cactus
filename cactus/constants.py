@@ -113,8 +113,9 @@ Process the input hunks and file contents to create commits that tell a coherent
 2.  **Write "Why"-Focused, Human-Style Commit Messages:**
     *   For each commit, craft a concise message summarizing the **purpose and intent** driving the combined changes.
     *   **Format:** Write the message as a short summary (akin to a Git commit subject line). Use the **imperative mood** (e.g., "fix bug", "add feature", "refactor module").
+    *   **Length:** Keep messages brief and to the point. Aim for 50 characters or less when possible, never exceed 72 characters. Prioritize clarity and brevity over detailed explanations.
     *   **Style:** Messages must be written **entirely in lowercase**. They should possess a natural flow, mimicking a human developer's concise communication style during their workflow. Avoid generic or uninformative phrases like "update file", "make changes", or "code modifications".
-    *   **Focus:** Primarily answer the question: *Why* was this change necessary? (e.g., "fix user logout loop under high latency", "improve data loading performance for large datasets", "add profile editing endpoint per spec #123", "refactor auth logic to simplify unit testing"). While the main focus is the *reason* (the why), the message should naturally also summarize *what* was changed at a high level as part of explaining that purpose.
+    *   **Focus:** Primarily answer the question: *Why* was this change necessary? Use short, direct phrases (e.g., "fix logout loop", "improve load performance", "add profile endpoint", "refactor auth logic"). While the main focus is the *reason* (the why), the message should naturally also summarize *what* was changed at a high level as part of explaining that purpose.
 
 ## Guiding Principles for Grouping & Ordering:
 
