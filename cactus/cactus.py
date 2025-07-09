@@ -19,7 +19,7 @@ import os  # Added to handle relative imports
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))  # Add
 
-from api import get_clusters_from_gemini, get_clusters_from_openai, load_api_key, setup_api_key
+from api import get_clusters_from_gemini, get_clusters_from_openai, load_api_key, setup_api_key, num_tokens_from_string
 from changelog import generate_changelog
 from utils import setup_logging
 from git_utils import run, get_git_diff, restore_changes, parse_diff, stage_changes
@@ -79,6 +79,38 @@ def extract_patches(diff_data):
 
     return patches
 
+
+
+def get_file_token_counts(diff_data, model):
+    """
+    Calculate token counts for each file's diff content.
+    Returns a list of tuples (file_path, token_count) sorted by token count.
+    """
+    diff_text = diff_data.decode('latin-1')
+    file_token_counts = []
+
+    try:
+        patch_set = PatchSet.from_string(diff_text)
+    except Exception as e:
+        logger.error(f"Failed to parse diff data: {e}")
+        return []
+
+    for patched_file in patch_set:
+        file_path = patched_file.path
+        file_diff_content = []
+        
+        for hunk in patched_file:
+            hunk_lines = [line.encode('latin-1').decode('utf-8', errors='replace') for line in str(hunk).splitlines()]
+            file_diff_content.extend(hunk_lines)
+        
+        if file_diff_content:
+            diff_text_for_file = '\n'.join(file_diff_content)
+            token_count = num_tokens_from_string(diff_text_for_file, model)
+            file_token_counts.append((file_path, token_count))
+
+    # Sort by token count (ascending order)
+    file_token_counts.sort(key=lambda x: x[1])
+    return file_token_counts
 
 
 def prepare_prompt_data(diff_data):
@@ -151,6 +183,20 @@ def generate_changes(args):
     full_diff = get_git_diff(args.context_size)
     patches = extract_patches(full_diff)
     prompt_data = prepare_prompt_data(full_diff)
+
+    # Display file token counts before clustering
+    file_token_counts = get_file_token_counts(full_diff, args.model)
+    if file_token_counts:
+        logger.info("Token usage by file (diff content only):")
+        
+        # Calculate the maximum file path length for alignment
+        max_path_length = max(len(file_path) for file_path, _ in file_token_counts)
+        
+        for file_path, token_count in file_token_counts:
+            # Use colored output with aligned columns
+            padded_path = file_path.ljust(max_path_length)
+            print(f"  \033[36m{padded_path}\033[0m : \033[33m{token_count:>6}\033[0m tokens")
+        print()
 
     if "gemini" in args.model:
         get_clusters_func=partial(get_clusters_from_gemini, hunks_n=len(patches), model=args.model)
