@@ -3,7 +3,7 @@ import os
 import re
 import numpy as np
 from collections import Counter
-from git_utils import parse_diff, stage_changes
+from .git_utils import parse_diff, stage_changes
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
