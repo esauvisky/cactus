@@ -140,12 +140,17 @@ def get_clusters_from_gemini(prompt_data, clusters_n, hunks_n, model):
     chat_session = model_instance.start_chat(history=[])
 
     response = chat_session.send_message(
-
-    json.dumps(prompt_data) + "\n## PROMPT\nGroup the hunks above into " +
+        json.dumps(prompt_data) + "\n## PROMPT\nGroup the hunks above into " +
                (f"exactly **{clusters_n}** commits" if clusters_n else "at least 1 commit")
                 + f" encompassing logically related hunks each, for all the **{hunks_n}** hunks above. Use every single hunk once and only once."
                 + " Closely follow the instructions and format the output as a JSON array of commits.")
-    content = json.loads(response.text)
+
+    # Check if response was blocked or has issues
+    if not response.candidates or not response.candidates[0].content.parts:
+        logger.error(f"Gemini API response was blocked or empty. Finish reason: {response.candidates[0].finish_reason if response.candidates else 'No candidates'}")
+        raise ValueError("Gemini API response was blocked or contained no valid content")
+
+    content = json.loads(response.candidates[0].content.parts[0].text)
     clusters = content["commits"]
 
     sum_hunks = sum([len(cluster['hunk_indices']) for cluster in clusters])
