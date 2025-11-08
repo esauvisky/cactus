@@ -49,6 +49,7 @@ def extract_patches(diff_data):
         return []
 
     for patched_file in patch_set:
+        logger.debug(f"Processing file: {patched_file.path} with {len(patched_file)} hunks")
 
         file_headers = []
         file_headers.append(str("".join(list(patched_file.patch_info)[:-1])).strip())
@@ -71,12 +72,14 @@ def extract_patches(diff_data):
             patches.append(patch_bytes)
             continue
 
-        for hunk in patched_file:
+        for i, hunk in enumerate(patched_file):
+            logger.debug(f"  Hunk {i+1}: {len(str(hunk).splitlines())} lines")
             hunk_text = str(hunk)
             patch_text = file_header_text + '\n' + hunk_text
             patch_bytes = patch_text.encode('latin-1')
             patches.append(patch_bytes)
 
+    logger.debug(f"Total patches created: {len(patches)}")
     return patches
 
 
@@ -183,6 +186,9 @@ def generate_changes(args):
     full_diff = get_git_diff(args.context_size)
     patches = extract_patches(full_diff)
     prompt_data = prepare_prompt_data(full_diff)
+
+    # Debug logging
+    logger.debug(f"Total patches extracted: {len(patches)}")
 
     # Display file token counts before clustering
     file_token_counts = get_file_token_counts(full_diff, args.model)
