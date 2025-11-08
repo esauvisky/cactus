@@ -101,11 +101,11 @@ def get_file_token_counts(diff_data, model):
     for patched_file in patch_set:
         file_path = patched_file.path
         file_diff_content = []
-        
+
         for hunk in patched_file:
             hunk_lines = [line.encode('latin-1').decode('utf-8', errors='replace') for line in str(hunk).splitlines()]
             file_diff_content.extend(hunk_lines)
-        
+
         if file_diff_content:
             diff_text_for_file = '\n'.join(file_diff_content)
             token_count = num_tokens_from_string(diff_text_for_file, model)
@@ -194,10 +194,10 @@ def generate_changes(args):
     file_token_counts = get_file_token_counts(full_diff, args.model)
     if file_token_counts:
         logger.info("Token usage by file (diff content only):")
-        
+
         # Calculate the maximum file path length for alignment
         max_path_length = max(len(file_path) for file_path, _ in file_token_counts)
-        
+
         for file_path, token_count in file_token_counts:
             # Use colored output with aligned columns
             padded_path = file_path.ljust(max_path_length)
