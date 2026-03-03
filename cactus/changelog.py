@@ -45,9 +45,6 @@ def generate_changelog(args, model):
         ).text if "gemini" in model else openai.chat.completions.create(
             model=model,
             n=1,
-            top_p=0.8,
-            temperature=0.8,
-            max_tokens=1000,
             messages=[
                 {"role": "system", "content": PROMPT_CHANGELOG_SYSTEM},
                 {"role": "user", "content": PROMPT_CHANGELOG_GENERATOR.format(commit_messages=commit_messages, chunk=chunk)}

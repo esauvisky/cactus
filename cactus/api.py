@@ -103,7 +103,7 @@ def get_clusters_from_openai(prompt_data, clusters_n, hunks_n, model):
         model=model,
         top_p=1,
         temperature=1,
-        max_tokens=1024,
+        # max_tokens=1024,
         response_format={
             "type": "json_schema", "json_schema": CLASSIFICATOR_SCHEMA_OPENAI
         },                                                                        # type: ignore
